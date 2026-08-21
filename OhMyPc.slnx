@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/OhMyPc.App/OhMyPc.App.csproj" />
+    <Project Path="src/OhMyPc.Core/OhMyPc.Core.csproj" />
+    <Project Path="src/OhMyPc.Infrastructure/OhMyPc.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OhMyPc.Core.Tests/OhMyPc.Core.Tests.csproj" />
+    <Project Path="tests/OhMyPc.IntegrationTests/OhMyPc.IntegrationTests.csproj" />
+  </Folder>
+</Solution>

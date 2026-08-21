@@ -1,0 +1,25 @@
+# .NET build output
+**/[Bb]in/
+**/[Oo]bj/
+.vs/
+*.user
+*.suo
+TestResults/
+
+# Node dependencies and local tool output
+**/node_modules/
+.tools/
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local application data
+*.db
+*.db-shm
+*.db-wal
+*.log
+
+# IDE metadata
+.idea/
+.vscode/
