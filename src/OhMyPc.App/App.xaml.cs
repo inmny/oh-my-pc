@@ -69,6 +69,7 @@ public partial class App : System.Windows.Application
             builder.Services.AddSingleton<NotificationCenterViewModel>();
             builder.Services.AddSingleton<MainViewModel>();
             builder.Services.AddSingleton<VpnQuotaViewModel>();
+            builder.Services.AddSingleton<ProxyViewModel>();
             builder.Services.AddSingleton<MainWindow>();
 
             _host = builder.Build();

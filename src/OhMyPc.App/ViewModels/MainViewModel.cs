@@ -65,6 +65,7 @@ public sealed class MainViewModel : ViewModelBase
         EnvironmentSourceImporter importer,
         VpnQuotaViewModel vpn,
         NotificationCenterViewModel notificationCenter,
+        ProxyViewModel proxy,
         LocalNotificationApiService localApi,
         StartupRegistrationService startup,
         LocalizationService text,
@@ -77,6 +78,7 @@ public sealed class MainViewModel : ViewModelBase
         _importer = importer;
         Vpn = vpn;
         NotificationCenter = notificationCenter;
+        Proxy = proxy;
         _localApi = localApi;
         _startup = startup;
         _text = text;
@@ -121,6 +123,7 @@ public sealed class MainViewModel : ViewModelBase
     public ObservableCollection<UsageBreakdownRowViewModel> UsageBreakdownRows { get; } = [];
     public VpnQuotaViewModel Vpn { get; }
     public NotificationCenterViewModel NotificationCenter { get; }
+    public ProxyViewModel Proxy { get; }
 
     public ICommand RefreshCommand { get; }
     public ICommand SelectBreakdownGroupCommand { get; }
@@ -161,6 +164,7 @@ public sealed class MainViewModel : ViewModelBase
         await RefreshQuotaStateAsync();
         await Vpn.LoadAsync();
         await NotificationCenter.LoadAsync(Settings.NotificationHistoryRetentionDays);
+        await Proxy.InitializeAsync();
         RefreshUsageLocalization();
         LastUpdated = _text.Format("Status_Updated", DateTime.Now);
     }
@@ -284,6 +288,7 @@ public sealed class MainViewModel : ViewModelBase
             RefreshUsageLocalization(force: true);
             Vpn.RefreshLocalization();
             NotificationCenter.RefreshLocalization();
+            Proxy.RefreshLocalization();
             await RefreshQuotaStateAsync();
             try
             {
@@ -317,7 +322,8 @@ public sealed class MainViewModel : ViewModelBase
         DanmakuDurationSeconds = settings.DanmakuDurationSeconds,
         LocalApiEnabled = settings.LocalApiEnabled,
         LocalApiPort = settings.LocalApiPort,
-        NotificationHistoryRetentionDays = settings.NotificationHistoryRetentionDays
+        NotificationHistoryRetentionDays = settings.NotificationHistoryRetentionDays,
+        CliProxyAutoStart = settings.CliProxyAutoStart
     };
 
     private void RefreshLocalApiStatus()

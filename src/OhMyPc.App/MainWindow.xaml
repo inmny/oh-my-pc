@@ -1059,6 +1059,441 @@
                 </Grid>
             </TabItem>
 
+            <TabItem Header="{DynamicResource Nav_Proxy}">
+                <Grid Margin="28,0,28,28">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Margin="0,0,0,16">
+                        <TextBlock Text="{DynamicResource Proxy_Title}" Style="{StaticResource SectionTitle}" />
+                        <TextBlock Text="{DynamicResource Proxy_Description}" Style="{StaticResource MutedText}" Margin="0,5,0,0" />
+                    </StackPanel>
+
+                    <!-- 未安装：安装引导 -->
+                    <Border Grid.Row="1"
+                            Style="{StaticResource PanelCard}"
+                            Padding="18,16"
+                            Margin="0,0,0,16"
+                            Visibility="{Binding Proxy.IsNotInstalled, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <StackPanel MaxWidth="640" HorizontalAlignment="Left">
+                            <TextBlock Text="{DynamicResource Proxy_SetupTitle}" FontWeight="SemiBold" FontSize="14" />
+                            <TextBlock Text="{DynamicResource Proxy_SetupHint}" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,6,0,0" />
+                            <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                                <CheckBox Content="{DynamicResource Proxy_Migrate}"
+                                          IsChecked="{Binding Proxy.MigrateFromEasyCpa}"
+                                          IsEnabled="{Binding Proxy.CanMigrate}"
+                                          VerticalAlignment="Center"
+                                          Margin="0,0,16,0" />
+                                <Button Content="{DynamicResource Proxy_Install}"
+                                        Command="{Binding Proxy.InstallCommand}"
+                                        Style="{StaticResource PrimaryButton}"
+                                        Margin="0,0,8,0" />
+                                <Button Content="{DynamicResource Proxy_Redetect}" Command="{Binding Proxy.RedetectCommand}" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding Proxy.InstallStatusText}"
+                                       Foreground="{StaticResource CriticalBrush}"
+                                       FontSize="12"
+                                       TextWrapping="Wrap"
+                                       Margin="0,10,0,0"
+                                       Visibility="{Binding Proxy.HasInstallError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        </StackPanel>
+                    </Border>
+
+                    <!-- 已安装：服务状态条 -->
+                    <Border Grid.Row="1"
+                            Style="{StaticResource PanelCard}"
+                            Padding="16,10"
+                            Margin="0,0,0,12"
+                            Visibility="{Binding Proxy.IsInstalled, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="8" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="8" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <Ellipse Width="9" Height="9" Margin="0,0,8,0" VerticalAlignment="Center">
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Setter Property="Fill" Value="{StaticResource MutedBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Proxy.IsRunning}" Value="True">
+                                                    <Setter Property="Fill" Value="{StaticResource AccentBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Proxy.IsStarting}" Value="True">
+                                                    <Setter Property="Fill" Value="{StaticResource AmberBrush}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                                <TextBlock Text="{Binding Proxy.StateText}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" Text="{Binding Proxy.VersionText}" Style="{StaticResource MutedText}" Margin="18,0,0,0" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2" Text="{Binding Proxy.ModelCountText}" Style="{StaticResource MutedText}" Margin="14,0,0,0" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="3" Text="{Binding Proxy.BaseUrlText}" Style="{StaticResource MutedText}" Margin="14,0,0,0" VerticalAlignment="Center" HorizontalAlignment="Right" />
+                            <Button Grid.Column="4" Content="{DynamicResource Proxy_Start}" Command="{Binding Proxy.StartCommand}" />
+                            <Button Grid.Column="6" Content="{DynamicResource Proxy_Stop}" Command="{Binding Proxy.StopCommand}" />
+                            <Button Grid.Column="8" Content="{DynamicResource Proxy_Restart}" Command="{Binding Proxy.RestartCommand}" />
+                        </Grid>
+                    </Border>
+
+                    <TextBlock Grid.Row="1"
+                               Text="{Binding Proxy.OperationText}"
+                               Foreground="{StaticResource CriticalBrush}"
+                               FontSize="12"
+                               Margin="0,0,0,10"
+                               VerticalAlignment="Bottom"
+                               Visibility="{Binding Proxy.HasOperationError, Converter={StaticResource BooleanToVisibilityConverter}}" />
+
+                    <!-- 二级分段：上游 Provider / 路由与接入 / 客户端同步 -->
+                    <Grid Grid.Row="2" Margin="0,0,0,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border Background="{StaticResource PanelRaisedBrush}" CornerRadius="4" Padding="3">
+                            <StackPanel Orientation="Horizontal">
+                                <RadioButton Content="{DynamicResource Proxy_ProvidersTab}"
+                                             GroupName="ProxySection"
+                                             Style="{StaticResource SegmentButton}"
+                                             IsChecked="{Binding Proxy.IsProvidersSelected, Mode=TwoWay}" />
+                                <RadioButton Content="{DynamicResource Proxy_UnifiedTab}"
+                                             GroupName="ProxySection"
+                                             Style="{StaticResource SegmentButton}"
+                                             IsChecked="{Binding Proxy.IsUnifiedSelected, Mode=TwoWay}" />
+                                <RadioButton Content="{DynamicResource Proxy_RoutingTab}"
+                                             GroupName="ProxySection"
+                                             Style="{StaticResource SegmentButton}"
+                                             IsChecked="{Binding Proxy.IsRoutingSelected, Mode=TwoWay}" />
+                                <RadioButton Content="{DynamicResource Proxy_ClientsTab}"
+                                             GroupName="ProxySection"
+                                             Style="{StaticResource SegmentButton}"
+                                             IsChecked="{Binding Proxy.IsClientsSelected, Mode=TwoWay}" />
+                            </StackPanel>
+                        </Border>
+                        <Button Grid.Column="2"
+                                Content="{DynamicResource Proxy_SaveConfig}"
+                                Command="{Binding Proxy.SaveConfigCommand}"
+                                Style="{StaticResource PrimaryButton}" />
+                    </Grid>
+
+                    <!-- 上游 Provider -->
+                    <Grid Grid.Row="3"
+                          Visibility="{Binding Proxy.IsProvidersSelected, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="290" />
+                            <ColumnDefinition Width="16" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Style="{StaticResource PanelCard}" Padding="10">
+                            <DockPanel>
+                                <Border DockPanel.Dock="Bottom"
+                                        BorderBrush="{StaticResource BorderBrush}"
+                                        BorderThickness="0,1,0,0"
+                                        Margin="0,10,0,0"
+                                        Padding="0,10,0,0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Content="{DynamicResource Proxy_AddClaude}" Command="{Binding Proxy.AddClaudeCommand}" Margin="0,0,8,0" />
+                                        <Button Content="{DynamicResource Proxy_AddCodex}" Command="{Binding Proxy.AddCodexCommand}" Margin="0,0,8,0" />
+                                        <Button Content="{DynamicResource Common_Delete}" Click="DeleteProxyProvider_Click" Style="{StaticResource DangerButton}" />
+                                    </StackPanel>
+                                </Border>
+                                <ListBox ItemsSource="{Binding Proxy.Providers}"
+                                         SelectedItem="{Binding Proxy.SelectedProvider, Mode=TwoWay}"
+                                         ItemContainerStyle="{StaticResource AppCardListBoxItem}"
+                                         Background="Transparent"
+                                         BorderThickness="0"
+                                         HorizontalContentAlignment="Stretch"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel>
+                                                <Grid>
+                                                    <TextBlock Text="{Binding TitleText}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding ModelCountText}" Style="{StaticResource MutedText}" HorizontalAlignment="Right" />
+                                                </Grid>
+                                                <TextBlock Text="{Binding KindText}" Style="{StaticResource MutedText}" FontSize="11" Margin="0,3,0,0" />
+                                                <TextBlock Text="{Binding BaseUrl}" Style="{StaticResource MutedText}" FontSize="11" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </DockPanel>
+                        </Border>
+
+                        <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                            <StackPanel IsEnabled="{Binding Proxy.HasSelectedProvider}">
+                                <Border Style="{StaticResource PanelCard}" Padding="16,14" Margin="0,0,0,12">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="14" />
+                                                <ColumnDefinition Width="110" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel>
+                                                <Label Content="{DynamicResource Proxy_Remark}" />
+                                                <TextBox Text="{Binding Proxy.SelectedProvider.Remark, UpdateSourceTrigger=PropertyChanged}" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2">
+                                                <Label Content="{DynamicResource Proxy_Priority}" />
+                                                <TextBox Text="{Binding Proxy.SelectedProvider.PriorityText, UpdateSourceTrigger=PropertyChanged}" />
+                                            </StackPanel>
+                                        </Grid>
+                                        <StackPanel Margin="0,0,0,10">
+                                            <Label Content="{DynamicResource Proxy_ApiKey}" />
+                                            <TextBox Text="{Binding Proxy.SelectedProvider.ApiKey, UpdateSourceTrigger=PropertyChanged}" />
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,0,10">
+                                            <Label Content="{DynamicResource Proxy_BaseUrl}" />
+                                            <TextBox Text="{Binding Proxy.SelectedProvider.BaseUrl, UpdateSourceTrigger=PropertyChanged}" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{DynamicResource Proxy_Models}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                    <Button Grid.Column="1" Content="{DynamicResource Proxy_FetchModels}" Click="FetchProxyModels_Click" Style="{StaticResource PrimaryButton}" />
+                                    <Button Grid.Column="3" Content="{DynamicResource Proxy_AddModel}" Click="AddProxyModel_Click" />
+                                    <Button Grid.Column="5" Content="{DynamicResource Common_Edit}" Click="EditProxyModel_Click" IsEnabled="{Binding Proxy.SelectedProvider.HasSelectedModel}" />
+                                    <Button Grid.Column="7" Content="{DynamicResource Common_Delete}" Click="DeleteProxyModel_Click" Style="{StaticResource DangerButton}" IsEnabled="{Binding Proxy.SelectedProvider.HasSelectedModel}" />
+                                </Grid>
+
+                                <DataGrid ItemsSource="{Binding Proxy.SelectedProvider.Models}"
+                                          SelectedItem="{Binding Proxy.SelectedProvider.SelectedModel, Mode=TwoWay}"
+                                          SelectionMode="Single"
+                                          MinHeight="160"
+                                          MaxHeight="320"
+                                          VerticalScrollBarVisibility="Auto">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="{Binding Source={StaticResource Localization}, Path=[Proxy_ColumnModel]}"
+                                                            Binding="{Binding Name}"
+                                                            Width="1.2*" />
+                                        <DataGridTextColumn Header="{Binding Source={StaticResource Localization}, Path=[Proxy_ColumnAlias]}"
+                                                            Binding="{Binding Alias}"
+                                                            Width="1.2*" />
+                                        <DataGridTextColumn Header="{Binding Source={StaticResource Localization}, Path=[Proxy_ColumnContext]}"
+                                                            Binding="{Binding ContextText}"
+                                                            Width="90" />
+                                        <DataGridTextColumn Header="{Binding Source={StaticResource Localization}, Path=[Proxy_ColumnLevels]}"
+                                                            Binding="{Binding LevelsText}"
+                                                            Width="1.1*" />
+                                        <DataGridTextColumn Header="{Binding Source={StaticResource Localization}, Path=[Proxy_ColumnModalities]}"
+                                                            Binding="{Binding ModalitiesText}"
+                                                            Width="1.2*" />
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+
+                    <!-- 模型统一配置 -->
+                    <Grid Grid.Row="3"
+                          Visibility="{Binding Proxy.IsUnifiedSelected, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Grid Margin="0,0,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{DynamicResource Proxy_UnifiedHint}" Style="{StaticResource MutedText}" TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,16,0" />
+                            <Button Grid.Column="1"
+                                    Content="{DynamicResource Common_Edit}"
+                                    Click="EditUnifiedModel_Click"
+                                    IsEnabled="{Binding Proxy.HasSelectedUnifiedModel}"
+                                    Style="{StaticResource PrimaryButton}" />
+                        </Grid>
+                        <DataGrid Grid.Row="1"
+                                  ItemsSource="{Binding Proxy.UnifiedModels}"
+                                  SelectedItem="{Binding Proxy.SelectedUnifiedModel, Mode=TwoWay}"
+                                  SelectionMode="Single"
+                                  AutoGenerateColumns="False">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="{Binding Source={StaticResource Localization}, Path=[Proxy_ColumnModel]}"
+                                                    Binding="{Binding Name}"
+                                                    Width="1.6*" />
+                                <DataGridTextColumn Header="{Binding Source={StaticResource Localization}, Path=[Proxy_UnifiedProviderCount]}"
+                                                    Binding="{Binding ProviderCount}"
+                                                    Width="96" />
+                                <DataGridTextColumn Header="{Binding Source={StaticResource Localization}, Path=[Proxy_ColumnContext]}"
+                                                    Binding="{Binding ContextText}"
+                                                    Width="100" />
+                                <DataGridTextColumn Header="{Binding Source={StaticResource Localization}, Path=[Proxy_ColumnLevels]}"
+                                                    Binding="{Binding LevelsText}"
+                                                    Width="1.2*" />
+                                <DataGridTemplateColumn Header="{Binding Source={StaticResource Localization}, Path=[Proxy_UnifiedConsistency]}" Width="120">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{DynamicResource Proxy_UnifiedInconsistent}"
+                                                       FontSize="11"
+                                                       VerticalAlignment="Center">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsInconsistent}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                                <Setter Property="Foreground" Value="{StaticResource AmberBrush}" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+
+                    <!-- 路由与接入 -->
+                    <ScrollViewer Grid.Row="3"
+                                  VerticalScrollBarVisibility="Auto"
+                                  Visibility="{Binding Proxy.IsRoutingSelected, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <Border Style="{StaticResource PanelCard}" Padding="20,16" MaxWidth="640" HorizontalAlignment="Left" Margin="0,0,0,0">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="200" />
+                                        <ColumnDefinition Width="240" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{DynamicResource Proxy_RoutingStrategy}" VerticalAlignment="Center" />
+                                    <ComboBox Grid.Column="1" SelectedValue="{Binding Proxy.SelectedStrategy}" SelectedValuePath="Tag">
+                                        <ComboBoxItem Tag="round-robin" Content="{DynamicResource Proxy_StrategyRoundRobin}" />
+                                        <ComboBoxItem Tag="weighted-round-robin" Content="{DynamicResource Proxy_StrategyWeighted}" />
+                                        <ComboBoxItem Tag="fill-first" Content="{DynamicResource Proxy_StrategyFillFirst}" />
+                                    </ComboBox>
+                                </Grid>
+                                <CheckBox Content="{DynamicResource Proxy_SessionAffinity}"
+                                          IsChecked="{Binding Proxy.SessionAffinity}"
+                                          Margin="0,0,0,14" />
+                                <Grid Margin="0,0,0,12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="200" />
+                                        <ColumnDefinition Width="240" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{DynamicResource Proxy_RequestRetry}" VerticalAlignment="Center" />
+                                    <TextBox Grid.Column="1" Text="{Binding Proxy.RequestRetryText, UpdateSourceTrigger=PropertyChanged}" />
+                                </Grid>
+                                <Grid Margin="0,0,0,16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="200" />
+                                        <ColumnDefinition Width="240" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{DynamicResource Proxy_MaxRetryInterval}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                    <TextBox Grid.Column="1" Text="{Binding Proxy.MaxRetryIntervalText, UpdateSourceTrigger=PropertyChanged}" />
+                                </Grid>
+                                <StackPanel Margin="0,0,0,16">
+                                    <Label Content="{DynamicResource Proxy_ApiKeys}" />
+                                    <TextBox Text="{Binding Proxy.ApiKeysText, UpdateSourceTrigger=PropertyChanged}"
+                                             AcceptsReturn="True"
+                                             TextWrapping="Wrap"
+                                             VerticalScrollBarVisibility="Auto"
+                                             Height="86" />
+                                </StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="200" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="{DynamicResource Proxy_ServiceAddress}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Proxy.BaseUrlText}" VerticalAlignment="Center" Style="{StaticResource MutedText}" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </ScrollViewer>
+
+                    <!-- 客户端同步 -->
+                    <ScrollViewer Grid.Row="3"
+                                  VerticalScrollBarVisibility="Auto"
+                                  Visibility="{Binding Proxy.IsClientsSelected, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <StackPanel>
+                            <TextBlock Text="{DynamicResource Proxy_ClientsIntro}" Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,12" />
+                            <ItemsControl ItemsSource="{Binding Proxy.Clients}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource PanelCard}" Padding="16,14" Margin="0,0,0,12">
+                                            <StackPanel>
+                                                <Grid Margin="0,0,0,12">
+                                                    <TextBlock Text="{Binding NameText}" FontWeight="SemiBold" FontSize="14" />
+                                                    <TextBlock Text="{Binding ConfigFileText}"
+                                                               Style="{StaticResource MutedText}"
+                                                               Foreground="{StaticResource AccentBrush}"
+                                                               HorizontalAlignment="Right"
+                                                               VerticalAlignment="Center" />
+                                                </Grid>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="14" />
+                                                        <ColumnDefinition Width="130" />
+                                                        <ColumnDefinition Width="14" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="Auto" />
+                                                    </Grid.RowDefinitions>
+                                                    <StackPanel>
+                                                        <Label Content="{DynamicResource Proxy_DefaultModel}" />
+                                                        <ComboBox ItemsSource="{Binding Models}"
+                                                                  SelectedItem="{Binding SelectedModel, Mode=TwoWay}"
+                                                                  DisplayMemberPath="Display" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="2">
+                                                        <Label Content="{DynamicResource Proxy_DefaultEffort}" />
+                                                        <ComboBox ItemsSource="{Binding Efforts}"
+                                                                  SelectedItem="{Binding SelectedEffort, Mode=TwoWay}" />
+                                                    </StackPanel>
+                                                    <Button Grid.Column="4"
+                                                            Grid.RowSpan="2"
+                                                            Content="{DynamicResource Proxy_Sync}"
+                                                            Command="{Binding DataContext.Proxy.SyncClientCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding Client}"
+                                                            VerticalAlignment="Center"
+                                                            Style="{StaticResource PrimaryButton}" />
+                                                    <TextBlock Grid.Row="1" Grid.ColumnSpan="5"
+                                                               Text="{Binding LastSyncText}"
+                                                               Style="{StaticResource MutedText}"
+                                                               FontSize="12"
+                                                               Margin="0,10,0,0"
+                                                               TextWrapping="Wrap" />
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
             <TabItem Header="{DynamicResource Nav_Settings}">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <Grid Margin="28,0,28,28"
@@ -1094,6 +1529,7 @@
                                         <ComboBoxItem Tag="en-US" Content="{DynamicResource Language_EnUS}" />
                                     </ComboBox>
                                     <CheckBox Content="{DynamicResource Settings_StartWithWindows}" IsChecked="{Binding Settings.StartWithWindows}" Margin="0,0,0,12" />
+                                    <CheckBox Content="{DynamicResource Settings_CliProxyAutoStart}" IsChecked="{Binding Settings.CliProxyAutoStart}" Margin="0,0,0,12" />
                                     <CheckBox Content="{DynamicResource Settings_EnableNotifications}" IsChecked="{Binding Settings.NotificationsEnabled}" />
                                     <TextBlock Text="{DynamicResource Settings_NotificationRetention}" Margin="0,16,0,6" />
                                     <ComboBox SelectedValue="{Binding Settings.NotificationHistoryRetentionDays, Mode=TwoWay}"

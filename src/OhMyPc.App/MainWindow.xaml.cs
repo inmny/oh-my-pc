@@ -255,5 +255,69 @@ public partial class MainWindow : Window
                 MessageBoxImage.Error);
         }
     }
+    private void DeleteProxyProvider_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.Proxy.SelectedProvider is null) return;
+        var answer = System.Windows.MessageBox.Show(
+            _text["Message_DeleteProxyProvider"],
+            "Oh My PC",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (answer == MessageBoxResult.Yes) ViewModel.Proxy.RemoveSelectedProvider();
+    }
+
+    private void AddProxyModel_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.Proxy.SelectedProvider is null) return;
+        var dialog = new ProxyModelDialog(_text, null) { Owner = this };
+        if (dialog.ShowDialog() == true) ViewModel.Proxy.AddModelToSelected(dialog.Model);
+    }
+
+    private void EditProxyModel_Click(object sender, RoutedEventArgs e)
+    {
+        var provider = ViewModel.Proxy.SelectedProvider;
+        if (provider?.SelectedModel is null) return;
+        var dialog = new ProxyModelDialog(_text, provider.SelectedModel.Source) { Owner = this };
+        if (dialog.ShowDialog() == true) ViewModel.Proxy.UpdateSelectedModel(dialog.Model);
+    }
+
+    private void DeleteProxyModel_Click(object sender, RoutedEventArgs e) =>
+        ViewModel.Proxy.RemoveSelectedModel();
+
+    private async void FetchProxyModels_Click(object sender, RoutedEventArgs e)
+    {
+        var provider = ViewModel.Proxy.SelectedProvider;
+        if (provider is null) return;
+        IReadOnlyList<ViewModels.ProxyImportModelRow> rows;
+        try
+        {
+            rows = await ViewModel.Proxy.PrepareImportRowsAsync(provider.ToConfig());
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        {
+            System.Windows.MessageBox.Show(
+                _text.Format("Proxy_FetchModelsFailed", exception.Message),
+                "Oh My PC",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+        if (rows.Count == 0)
+        {
+            System.Windows.MessageBox.Show(_text["Proxy_NoRemoteModels"], "Oh My PC", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var dialog = new ProxyModelImportDialog(_text, provider.TitleText, rows) { Owner = this };
+        if (dialog.ShowDialog() == true) ViewModel.Proxy.ApplyImportedModels(rows);
+    }
+
+    private void EditUnifiedModel_Click(object sender, RoutedEventArgs e)
+    {
+        var row = ViewModel.Proxy.SelectedUnifiedModel;
+        if (row is null) return;
+        var dialog = new ProxyUnifiedModelDialog(_text, row) { Owner = this };
+        if (dialog.ShowDialog() == true) ViewModel.Proxy.ApplyUnifiedModel(row, dialog.Result);
+    }
+
     private void Exit_Click(object sender, RoutedEventArgs e) => _windows.Exit();
 }
