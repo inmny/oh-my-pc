@@ -8,6 +8,10 @@ public sealed class LocalToolDetector
         ".dsh");
     public string DshSessionsRoot => Path.Combine(DshRoot, "sessions");
     public string DshSettingsPath => Path.Combine(DshRoot, "settings.yaml");
+    public string ZcodeDatabasePath { get; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        ".zcode", "cli", "db", "db.sqlite");
+    public string ZcodeDatabaseDirectory => Path.GetDirectoryName(ZcodeDatabasePath)!;
 
     public IReadOnlyList<string> DetectClients() => _roots
         .Where(pair => pair.Value.Any(Directory.Exists))
@@ -18,6 +22,7 @@ public sealed class LocalToolDetector
     public IReadOnlyList<string> GetWatchRoots() => _roots
         .SelectMany(pair => pair.Value)
         .Append(DshRoot)
+        .Append(ZcodeDatabaseDirectory)
         .Where(Directory.Exists)
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .ToList();
