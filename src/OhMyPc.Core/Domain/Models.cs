@@ -315,4 +315,5 @@ public sealed class AppSettings
     public bool LocalApiEnabled { get; set; }
     public int LocalApiPort { get; set; } = 39417;
     public int NotificationHistoryRetentionDays { get; set; } = NotificationRetentionPolicy.DefaultDays;
+    public bool CliProxyAutoStart { get; set; } = true;
 }

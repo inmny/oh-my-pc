@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using OhMyPc.Core;
 using OhMyPc.Infrastructure.Automation;
+using OhMyPc.Infrastructure.CliProxy;
 using OhMyPc.Infrastructure.InputStatus;
 using OhMyPc.Infrastructure.LocalApi;
 using OhMyPc.Infrastructure.LocalUsage;
@@ -44,6 +45,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<LocalToolDetector>();
         services.AddSingleton<TokscaleClient>();
         services.AddSingleton<DshUsageCollector>();
+        services.AddSingleton<ZcodeUsageCollector>();
         services.AddSingleton<ILocalUsageCollector, CompositeLocalUsageCollector>();
         services.AddSingleton<LocalUsageRefreshService>();
         services.AddHostedService<LocalUsageWorker>();
@@ -76,6 +78,32 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<EnvironmentSourceImporter>();
         services.AddSingleton<QuotaRefreshService>();
         services.AddHostedService<QuotaPollingWorker>();
+
+        services.AddHttpClient("proxy-status", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(3);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("OhMyPc/1.0");
+        });
+        services.AddHttpClient("proxy-download", client =>
+        {
+            client.Timeout = TimeSpan.FromMinutes(5);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("OhMyPc/1.0");
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+        });
+        services.AddHttpClient("models-dev", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("OhMyPc/1.0");
+        });
+        services.AddSingleton<IRemoteModelListClient, RemoteModelListClient>();
+        services.AddSingleton<IModelMetadataProvider, ModelMetadataClient>();
+        services.AddSingleton<IProxyConfigStore, CliProxyConfigStore>();
+        services.AddSingleton<ICliProxyInstaller, CliProxyInstaller>();
+        services.AddSingleton<CliProxyStatusService>();
+        services.AddSingleton<IProxyStatusService>(provider => provider.GetRequiredService<CliProxyStatusService>());
+        services.AddSingleton<ICliProxyProcessService, CliProxyProcessService>();
+        services.AddHostedService<CliProxyProcessWorker>();
+        services.AddSingleton<IClientConfigurator, CliProxyClientConfigurator>();
         return services;
     }
 }

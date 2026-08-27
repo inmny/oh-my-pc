@@ -123,3 +123,51 @@ public interface IVpnQuotaClient
     Task<string> LoginAsync(string email, string password, CancellationToken cancellationToken = default);
     Task<VpnSubscriptionSnapshot> GetSubscriptionAsync(string authData, CancellationToken cancellationToken = default);
 }
+
+public interface IProxyConfigStore
+{
+    Task<ProxyConfigSnapshot> LoadAsync(CancellationToken cancellationToken = default);
+    Task SaveAsync(ProxyConfigSnapshot snapshot, CancellationToken cancellationToken = default);
+    Task<bool> EnsureConfigAsync(CancellationToken cancellationToken = default);
+}
+
+public interface IProxyStatusService
+{
+    event EventHandler? Refreshed;
+    ProxyServiceStatus Last { get; }
+    Task<ProxyServiceStatus> RefreshAsync(CancellationToken cancellationToken = default);
+}
+
+public interface ICliProxyInstaller
+{
+    bool IsInstalled();
+    string? GetInstalledVersion();
+    bool CanMigrateFromEasyCpa();
+    Task<ProxyInstallResult> InstallAsync(ProxyInstallOptions options, CancellationToken cancellationToken = default);
+}
+
+public interface ICliProxyProcessService
+{
+    event EventHandler? StateChanged;
+    ProxyProcessState State { get; }
+    Task StartAsync(CancellationToken cancellationToken = default);
+    Task StopAsync(CancellationToken cancellationToken = default);
+    Task RestartAsync(CancellationToken cancellationToken = default);
+}
+
+public interface IClientConfigurator
+{
+    Task<ClientSyncResult> SyncAsync(ClientSyncPlan plan, CancellationToken cancellationToken = default);
+}
+
+/// <summary>从上游 provider（中转站）拉取其可用的模型 id 列表。</summary>
+public interface IRemoteModelListClient
+{
+    Task<IReadOnlyList<string>> FetchModelIdsAsync(ProxyProviderConfig provider, CancellationToken cancellationToken = default);
+}
+
+/// <summary>提供 models.dev 聚合的模型元数据（上下文/模态/思考档位/费用），按模型 id 检索。</summary>
+public interface IModelMetadataProvider
+{
+    Task<IReadOnlyDictionary<string, ModelMetadata>> GetAsync(CancellationToken cancellationToken = default);
+}
