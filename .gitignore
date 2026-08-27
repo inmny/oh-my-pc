@@ -23,3 +23,6 @@ yarn-error.log*
 # IDE metadata
 .idea/
 .vscode/
+
+# Local agent workspace
+.zcode/
