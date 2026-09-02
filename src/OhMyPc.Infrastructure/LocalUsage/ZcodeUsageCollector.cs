@@ -220,11 +220,12 @@ public sealed class ZcodeUsageCollector : ILocalUsageCollector
             {
                 costs.GatewayRates.TryGetValue(observation.Model, out rate);
             }
-            rate ??= costs.Catalog is { } catalog
-                && catalog.TryGetValue(observation.Model, out var metadata)
-                && !metadata.Cost.IsEmpty
-                    ? metadata.Cost
-                    : null;
+            // 订阅 provider 按 models.dev 牌价折算；-thinking/-high 等变体后缀剥离后按基型号匹配
+            if (rate is null && costs.Catalog is { } catalog
+                && ModelMetadataParser.Find(catalog, observation.Model) is { Cost.IsEmpty: false } found)
+            {
+                rate = found.Cost;
+            }
             if (rate is null) continue;
             observation.CostUsd = ((rate.Input ?? 0m) * observation.InputTokens
                 + (rate.Output ?? 0m) * observation.OutputTokens

@@ -78,6 +78,28 @@ public sealed class ModelMetadataParserTests
     }
 
     [Fact]
+    public void Parse_MergesDuplicatesPreferringMoreCompleteCost()
+    {
+        var json = """
+        {
+          "provider-bare": {
+            "models": { "dupe-model": { "cost": { "input": 5, "output": 25 } } }
+          },
+          "provider-full": {
+            "models": { "dupe-model": { "cost": { "input": 5, "output": 25, "cache_read": 0.5, "cache_write": 6.25 } } }
+          }
+        }
+        """;
+
+        var lookup = ModelMetadataParser.Parse(json);
+
+        // 先出现的条目只有输入/输出价，后出现的完整费率表（含缓存价）应胜出
+        var model = lookup["dupe-model"];
+        Assert.Equal(0.5m, model.Cost.CacheRead);
+        Assert.Equal(6.25m, model.Cost.CacheWrite);
+    }
+
+    [Fact]
     public void Parse_ToleratesEntriesWithoutMetadata()
     {
         var lookup = ModelMetadataParser.Parse(SampleJson);
@@ -85,5 +107,45 @@ public sealed class ModelMetadataParserTests
         Assert.Contains("no-metadata", lookup);
         Assert.Null(lookup["no-metadata"].ContextWindow);
         Assert.True(lookup["no-metadata"].Cost.IsEmpty);
+    }
+
+    [Fact]
+    public void Find_PrefersExactMatch()
+    {
+        var lookup = ModelMetadataParser.Parse(SampleJson);
+
+        var model = ModelMetadataParser.Find(lookup, "gpt-test");
+        Assert.NotNull(model);
+        Assert.Equal(5m, model.Cost.Input);
+    }
+
+    [Fact]
+    public void Find_StripsVariantSuffixes()
+    {
+        var lookup = ModelMetadataParser.Parse(SampleJson);
+
+        // 单个档位/变体后缀 → 基型号元数据
+        Assert.NotNull(ModelMetadataParser.Find(lookup, "gpt-test-high"));
+        Assert.NotNull(ModelMetadataParser.Find(lookup, "gpt-test-thinking"));
+        Assert.NotNull(ModelMetadataParser.Find(lookup, "gpt-test-max"));
+        // 连续多个后缀逐个剥离
+        var stacked = ModelMetadataParser.Find(lookup, "gpt-test-thinking-max");
+        Assert.NotNull(stacked);
+        Assert.Equal(5m, stacked.Cost.Input);
+        // org/ 前缀模型的短 id 变体同样命中
+        Assert.NotNull(ModelMetadataParser.Find(lookup, "model-x-high"));
+    }
+
+    [Fact]
+    public void Find_ReturnsNullForUnknownOrNonVariantIds()
+    {
+        var lookup = ModelMetadataParser.Parse(SampleJson);
+
+        Assert.Null(ModelMetadataParser.Find(lookup, "unknown"));
+        // 尾段不是档位/变体后缀，不做剥离
+        Assert.Null(ModelMetadataParser.Find(lookup, "unknown-preview"));
+        Assert.Null(ModelMetadataParser.Find(lookup, "gpt-test-preview"));
+        // 只有后缀本身（无 '-'）时安全返回
+        Assert.Null(ModelMetadataParser.Find(lookup, "high"));
     }
 }

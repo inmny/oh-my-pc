@@ -351,14 +351,12 @@ public sealed class ProxyViewModel : ViewModelBase
         var rows = new List<ProxyImportModelRow>();
         foreach (var id in ids)
         {
-            metadata.TryGetValue(id, out var meta);
-            rows.Add(BuildImportRow(id, existing.Contains(id), meta, unified));
+            rows.Add(BuildImportRow(id, existing.Contains(id), ModelMetadataParser.Find(metadata, id), unified));
         }
         foreach (var name in provider.Models.Select(model => model.Name)
                      .Where(name => !ids.Contains(name, StringComparer.OrdinalIgnoreCase)))
         {
-            metadata.TryGetValue(name, out var meta);
-            rows.Add(BuildImportRow(name, exists: true, meta, unified));
+            rows.Add(BuildImportRow(name, exists: true, ModelMetadataParser.Find(metadata, name), unified));
         }
         return rows;
     }

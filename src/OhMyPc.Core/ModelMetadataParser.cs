@@ -5,7 +5,7 @@ namespace OhMyPc.Core;
 
 /// <summary>
 /// 解析 models.dev 的 api.json（{providerId: {models: {modelId: {...}}}}）为归一化的元数据字典。
-/// 精确 id 与去掉 org/ 前缀的短 id 都会登记；同一 id 多 provider 重复时优先保留带费用的条目。
+/// 精确 id 与去掉 org/ 前缀的短 id 都会登记；同一 id 多 provider 重复时优先保留费率字段更完整的条目。
 /// </summary>
 public static class ModelMetadataParser
 {
@@ -39,11 +39,33 @@ public static class ModelMetadataParser
         return exact;
     }
 
-    /// <summary>已登记且带费用的条目优先；否则后来者覆盖无费用条目。</summary>
+    /// <summary>同名 id 多 provider 重复时，费率非空字段更多者胜出（含缓存价的完整费率表优先）；字段数相同保留既有条目。</summary>
     private static void Merge(Dictionary<string, ModelMetadata> target, string id, ModelMetadata metadata)
     {
-        if (target.TryGetValue(id, out var existing) && !existing.Cost.IsEmpty) return;
+        if (target.TryGetValue(id, out var existing) && CostFieldCount(existing.Cost) >= CostFieldCount(metadata.Cost)) return;
         target[id] = metadata;
+    }
+
+    private static int CostFieldCount(ProxyModelCost cost) =>
+        (cost.Input is null ? 0 : 1) + (cost.Output is null ? 0 : 1)
+        + (cost.CacheRead is null ? 0 : 1) + (cost.CacheWrite is null ? 0 : 1);
+
+    /// <summary>思考档位与推理变体的常见尾部后缀（如 claude-opus-4-6-thinking、gemini-3.1-pro-high）。</summary>
+    private static readonly HashSet<string> VariantSuffixes =
+        [.. ProxyCatalog.ThinkingLevels, "thinking", "nothinking"];
+
+    /// <summary>按 id 查找元数据：先精确匹配，未命中时逐个剥离尾部的档位/变体后缀再试。</summary>
+    public static ModelMetadata? Find(IReadOnlyDictionary<string, ModelMetadata> catalog, string id)
+    {
+        if (catalog.TryGetValue(id, out var metadata)) return metadata;
+        var candidate = id;
+        while (true)
+        {
+            var index = candidate.LastIndexOf('-');
+            if (index <= 0 || !VariantSuffixes.Contains(candidate[(index + 1)..])) return null;
+            candidate = candidate[..index];
+            if (catalog.TryGetValue(candidate, out metadata)) return metadata;
+        }
     }
 
     private static ModelMetadata ParseModel(string id, JsonNode node) => new()
