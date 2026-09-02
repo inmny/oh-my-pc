@@ -32,6 +32,7 @@ jobs:
         run: |
           $latest = gh release view --repo "${{ github.repository }}" --json tagName --jq .tagName 2>$null
           if ($LASTEXITCODE -ne 0) { $latest = '' }
+          $global:LASTEXITCODE = 0
           if ("v${{ steps.version.outputs.version }}" -eq "$latest") {
             "skip=true" >> $env:GITHUB_OUTPUT
             Write-Host "版本未变化（$latest），跳过发布"
