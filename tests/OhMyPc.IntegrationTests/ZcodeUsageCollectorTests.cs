@@ -31,7 +31,7 @@ public sealed class ZcodeUsageCollectorTests : IDisposable
     {
         var date = DateOnly.FromDateTime(DateTime.Now);
         CreateDatabase(
-            Row(date, "builtin:bigmodel-coding-plan", "GLM-5.3", input: 1000, output: 200, cacheRead: 5000, cacheWrite: 300, reasoning: 7),
+            Row(date, "builtin:bigmodel-coding-plan", "GLM-5.3", input: 6000, output: 200, cacheRead: 5000, cacheWrite: 300, reasoning: 7),
             Row(date, "builtin:bigmodel-coding-plan", "GLM-5.3", input: 2000, output: 100),
             Row(date, "builtin:bigmodel-coding-plan", "GLM-5.3-Flash", input: 40, output: 10),
             Row(date, "builtin:bigmodel-coding-plan", "GLM-5.3", input: 999, output: 999, status: "cancelled"),
@@ -43,11 +43,36 @@ public sealed class ZcodeUsageCollectorTests : IDisposable
         var main = Assert.Single(rows, row => row.Model == "GLM-5.3");
         Assert.Equal("zcode", main.Client);
         Assert.Equal("builtin:bigmodel-coding-plan", main.Provider);
-        Assert.Equal(8600, main.TotalTokens);
+        // input 为含缓存口径：6000-5000-300=700 为未命中缓存的新增输入
+        Assert.Equal(700 + 2000, main.InputTokens);
+        Assert.Equal(300, main.OutputTokens);
+        Assert.Equal(5000, main.CacheReadTokens);
+        Assert.Equal(300, main.CacheWriteTokens);
+        Assert.Equal(8300, main.TotalTokens);
         Assert.Equal(7, main.ReasoningTokens);
         Assert.Equal(2, main.MessageCount);
         Assert.Equal(0m, main.CostUsd);
         Assert.Single(rows, row => row.Model == "GLM-5.3-Flash");
+    }
+
+    [Fact]
+    public async Task Collector_ConvertsInclusiveInputToUncachedInput()
+    {
+        var date = DateOnly.FromDateTime(DateTime.Now);
+        CreateDatabase(
+            Row(date, "builtin-plan", "GLM-5.3", input: 10_000, output: 300, cacheRead: 9_000, cacheWrite: 500),
+            // 防御：上游数据异常（缓存大于输入）时 InputTokens 钳制为 0 而不是负数
+            Row(date, "builtin-plan", "GLM-5.3-Flash", input: 100, output: 40, cacheRead: 200));
+        var collector = CreateCollector();
+
+        var rows = await collector.CollectAsync(fullHistory: true);
+
+        var glm = Assert.Single(rows, row => row.Model == "GLM-5.3");
+        Assert.Equal(500, glm.InputTokens);
+        Assert.Equal(10_300, glm.TotalTokens);
+        var flash = Assert.Single(rows, row => row.Model == "GLM-5.3-Flash");
+        Assert.Equal(0, flash.InputTokens);
+        Assert.Equal(240, flash.TotalTokens);
     }
 
     [Fact]
@@ -71,7 +96,7 @@ public sealed class ZcodeUsageCollectorTests : IDisposable
     {
         var date = DateOnly.FromDateTime(DateTime.Now);
         CreateDatabase(
-            Row(date, "cpa-gw", "GPT-5.6-Terra", input: 1_000_000, output: 500_000, cacheRead: 2_000_000),
+            Row(date, "cpa-gw", "GPT-5.6-Terra", input: 3_500_000, output: 500_000, cacheRead: 2_000_000),
             Row(date, "offpeak-idle-plan", "GPT-5.6-Terra", input: 1_000_000, output: 500_000),
             Row(date, "builtin-plan", "GPT-5.6-Terra", input: 1_000_000, output: 500_000));
         var collector = CreateCollector(
@@ -81,7 +106,8 @@ public sealed class ZcodeUsageCollectorTests : IDisposable
         var rows = await collector.CollectAsync(fullHistory: true);
 
         var gateway = Assert.Single(rows, row => row.Provider == "cpa-gw");
-        Assert.Equal(1m + 2m * 0.5m + 0.1m * 2m, gateway.CostUsd);
+        // 未命中输入 = 3.5M - 2M = 1.5M
+        Assert.Equal(1.5m + 2m * 0.5m + 0.1m * 2m, gateway.CostUsd);
         Assert.Equal(99m + 98m * 0.5m, Assert.Single(rows, row => row.Provider == "offpeak-idle-plan").CostUsd);
         Assert.Equal(99m + 98m * 0.5m, Assert.Single(rows, row => row.Provider == "builtin-plan").CostUsd);
     }
@@ -91,7 +117,7 @@ public sealed class ZcodeUsageCollectorTests : IDisposable
     {
         var date = DateOnly.FromDateTime(DateTime.Now);
         CreateDatabase(
-            Row(date, "offpeak-idle-plan", "GLM-5.3", input: 2_000_000, output: 1_000_000, cacheRead: 4_000_000),
+            Row(date, "offpeak-idle-plan", "GLM-5.3", input: 6_000_000, output: 1_000_000, cacheRead: 4_000_000),
             Row(date, "builtin-plan", "Unknown-Model", input: 1_000_000, output: 0));
         var collector = CreateCollector(
             metadata: Metadata(("GLM-5.3", new ProxyModelCost { Input = 1m, Output = 2m, CacheRead = 0.25m })));

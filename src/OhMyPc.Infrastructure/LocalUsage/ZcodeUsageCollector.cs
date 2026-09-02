@@ -184,11 +184,16 @@ public sealed class ZcodeUsageCollector : ILocalUsageCollector
                 aggregate[key] = target;
             }
 
-            target.InputTokens += Integer(reader, 3);
+            // zcode 的 input_tokens 为 OpenAI 口径：已包含缓存命中的部分（实证：逐行
+            // provider_total == input+output，且不存在 input < cacheRead 的行）。
+            // 换算为应用统一的不含缓存口径：InputTokens 只记未命中缓存的新增输入。
+            var cacheWrite = Integer(reader, 6);
+            var cacheRead = Integer(reader, 7);
+            target.InputTokens += Math.Max(0, Integer(reader, 3) - cacheRead - cacheWrite);
             target.OutputTokens += Integer(reader, 4);
             target.ReasoningTokens += Integer(reader, 5);
-            target.CacheWriteTokens += Integer(reader, 6);
-            target.CacheReadTokens += Integer(reader, 7);
+            target.CacheWriteTokens += cacheWrite;
+            target.CacheReadTokens += cacheRead;
             target.MessageCount += 1;
         }
         return aggregate.Values
