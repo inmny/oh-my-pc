@@ -228,7 +228,7 @@ public sealed class ProxyViewModel : ViewModelBase
             }
         }
         ApplyStatus(await _status.RefreshAsync());
-        RebuildClientModels();
+        RebuildClientProviderPicks();
     }
 
     public async Task InstallAsync()
@@ -480,6 +480,8 @@ public sealed class ProxyViewModel : ViewModelBase
         foreach (var client in Clients) client.RefreshLocalization();
         ApplyStatus(_status.Last);
         Raise(nameof(SelectedStrategy));
+        // 范围勾选列表的展示文案来自 provider，语言切换后重建（勾选状态按 Key 保留）
+        RebuildClientProviderPicks();
     }
 
     private ProxyConfigSnapshot BuildSnapshot() => new()
@@ -519,32 +521,56 @@ public sealed class ProxyViewModel : ViewModelBase
     private async Task SyncClientAsync(ProxyClientKind kind)
     {
         var item = Clients.First(client => client.Client == kind);
-        var apiKey = _snapshot?.Access.ApiKeys.FirstOrDefault() ?? "";
-        if (apiKey.Length == 0)
+        var selectedProviders = Providers.Where(provider => item.IsProviderSelected(provider.Key)).ToList();
+        if (selectedProviders.Count == 0)
         {
-            item.LastSyncText = _text["Proxy_SyncNoKey"];
+            item.LastSyncText = _text["Proxy_SyncEmptyScope"];
             return;
         }
-        var models = Providers
-            .SelectMany(provider => provider.Models.Select(model => new ClientSyncModel(model.Source, provider.Kind)))
-            .ToList();
-        var plan = new ClientSyncPlan
+        var baseUrl = _snapshot?.Access.GetBaseUrl() ?? "";
+        ClientSyncPlan plan;
+        if (item.IsAllProviders)
         {
-            Client = kind,
-            ProviderId = string.IsNullOrWhiteSpace(item.ProviderId)
-                ? CliProxyClientConfigurator.DefaultProviderId
-                : item.ProviderId.Trim(),
-            BaseUrl = _snapshot?.Access.GetBaseUrl() ?? "",
-            ApiKey = apiKey,
-            Models = models,
-            DefaultModelId = item.SelectedModel?.Id,
-            DefaultEffort = string.IsNullOrWhiteSpace(item.SelectedEffort) ? null : item.SelectedEffort
-        };
+            var apiKey = _snapshot?.Access.ApiKeys.FirstOrDefault() ?? "";
+            if (apiKey.Length == 0)
+            {
+                item.LastSyncText = _text["Proxy_SyncNoKey"];
+                return;
+            }
+            plan = new ClientSyncPlan
+            {
+                Client = kind,
+                ProviderId = string.IsNullOrWhiteSpace(item.ProviderId)
+                    ? CliProxyClientConfigurator.DefaultProviderId
+                    : item.ProviderId.Trim(),
+                BaseUrl = baseUrl,
+                ApiKey = apiKey,
+                Models = [.. selectedProviders
+                    .SelectMany(provider => provider.Models.Select(model => new ClientSyncModel(model.Source, provider.Kind)))]
+            };
+        }
+        else
+        {
+            // 指定上游：客户端直连各上游的真实地址与密钥，不经网关
+            plan = new ClientSyncPlan
+            {
+                Client = kind,
+                BaseUrl = baseUrl,
+                Upstreams = [.. selectedProviders.Select(provider => new ClientSyncUpstream(
+                    provider.Key,
+                    provider.TitleText,
+                    provider.BaseUrl.Trim(),
+                    provider.ApiKey.Trim(),
+                    provider.Kind,
+                    [.. provider.Models.Select(model => model.Source)]))]
+            };
+        }
         try
         {
             var result = await _configurator.SyncAsync(plan);
             item.ProviderId = result.ProviderId;
-            item.LastSyncText = _text.Format("Proxy_SyncDone", result.DefaultModel ?? result.ProviderId);
+            item.LastSyncText = _text.Format("Proxy_SyncDone", result.ModelCount);
+            if (PersistScopeAsync is not null) await PersistScopeAsync(kind, item.CaptureScope());
         }
         catch (Exception exception)
         {
@@ -553,24 +579,30 @@ public sealed class ProxyViewModel : ViewModelBase
         }
     }
 
-    private void RebuildClientModels()
+    /// <summary>由 MainViewModel 注入：把本次同步使用的范围写入应用设置。</summary>
+    public Func<ProxyClientKind, ProxyClientSyncScope, Task>? PersistScopeAsync { get; set; }
+
+    /// <summary>把持久化的范围应用到各客户端卡片（Provider 列表加载后调用，键失配的条目保持默认）。</summary>
+    public void ApplyClientScopes(IReadOnlyDictionary<string, ProxyClientSyncScope> scopes)
     {
-        var choices = Providers
-            .SelectMany(provider => provider.Models.Select(model => new ProxyModelChoice(
-                model.Source.GetId(),
-                $"{model.Source.GetId()} · {provider.KindText}",
-                ProxyMappers.OrderLevels(model.Source.ThinkingLevels),
-                model.Source)))
-            .ToList();
         foreach (var client in Clients)
         {
-            client.UpdateModels(choices);
+            if (scopes.TryGetValue(client.Client.ToString(), out var scope)) client.ApplyScope(scope);
+        }
+    }
+
+    private void RebuildClientProviderPicks()
+    {
+        var picks = Providers.Select(provider => (provider.Key, provider.SyncDisplay)).ToList();
+        foreach (var client in Clients)
+        {
+            client.UpdateProviders(picks);
         }
     }
 
     private void RebuildDerived()
     {
-        RebuildClientModels();
+        RebuildClientProviderPicks();
         RebuildUnifiedModels();
     }
 
@@ -678,11 +710,17 @@ public sealed class ProxyProviderItemViewModel(ProxyProviderConfig config, Local
 
     public void RaiseModelCount() => Raise(nameof(ModelCountText));
 
+    /// <summary>同步范围的稳定标识，与 CliProxyConfigStore 复用条目的判定键（api-key + base-url）一致。</summary>
+    public string Key => $"{ApiKey}|{BaseUrl}";
+
+    public string SyncDisplay => $"{TitleText} · {ModelCountText}";
+
     public void RefreshLocalization()
     {
         Raise(nameof(KindText));
         Raise(nameof(TitleText));
         Raise(nameof(ModelCountText));
+        Raise(nameof(SyncDisplay));
     }
 }
 
@@ -707,18 +745,11 @@ public sealed class ProxyModelItemViewModel
         $"{string.Join("+", Source.InputModalities)} → {string.Join("+", Source.OutputModalities)}";
 }
 
-public sealed record ProxyModelChoice(
-    string Id,
-    string Display,
-    IReadOnlyList<string> Levels,
-    ProxyModelConfig Config);
-
-/// <summary>客户端同步卡片：默认模型选择与最近一次同步结果。</summary>
+/// <summary>客户端同步卡片：同步范围选择与最近一次同步结果；默认模型由用户在客户端内自行选择。</summary>
 public sealed class ProxyClientSyncItemViewModel(ProxyClientKind client, LocalizationService text) : ViewModelBase
 {
-    private readonly List<ProxyModelChoice> _models = [];
-    private ProxyModelChoice? _selectedModel;
-    private string _selectedEffort = "";
+    private readonly ObservableCollection<ProxyProviderPickItemViewModel> _providerPicks = [];
+    private bool _isAllProviders = true;
     private string _providerId = CliProxyClientConfigurator.DefaultProviderId;
     private string _lastSyncText = "";
 
@@ -740,39 +771,93 @@ public sealed class ProxyClientSyncItemViewModel(ProxyClientKind client, Localiz
 
     public string ConfigFileText => ConfigFileExists ? text["Proxy_ClientConfigFound"] : "";
 
-    public IReadOnlyList<ProxyModelChoice> Models => _models;
-
-    public IReadOnlyList<string> Efforts { get; private set; } = [];
-
-    public ProxyModelChoice? SelectedModel
+    public bool IsAllProviders
     {
-        get => _selectedModel;
+        get => _isAllProviders;
         set
         {
-            if (!Set(ref _selectedModel, value)) return;
-            Efforts = value?.Levels ?? [];
-            SelectedEffort = value is null ? "" : ProxyMappers.GetDefaultVariant(value.Levels) ?? "";
-            Raise(nameof(Efforts));
+            if (Set(ref _isAllProviders, value))
+            {
+                Raise(nameof(ShowProviderPicks));
+                Raise(nameof(ScopeIndex));
+            }
         }
     }
 
-    public string SelectedEffort { get => _selectedEffort; set => Set(ref _selectedEffort, value); }
+    public bool ShowProviderPicks => !IsAllProviders;
+
+    /// <summary>范围下拉的展示项；索引 0=全部上游，1=指定上游。</summary>
+    public IReadOnlyList<string> ScopeOptions => [text["Proxy_ScopeAll"], text["Proxy_ScopeSelected"]];
+
+    public int ScopeIndex
+    {
+        get => IsAllProviders ? 0 : 1;
+        set
+        {
+            var all = value == 0;
+            if (all == IsAllProviders) return;
+            IsAllProviders = all;
+        }
+    }
+
+    public ObservableCollection<ProxyProviderPickItemViewModel> ProviderPicks => _providerPicks;
+
     public string ProviderId { get => _providerId; set => Set(ref _providerId, value); }
     public string LastSyncText { get => _lastSyncText; set => Set(ref _lastSyncText, value); }
 
-    public void UpdateModels(IReadOnlyList<ProxyModelChoice> choices)
+    /// <summary>全部模式选中所有上游；指定模式只选中勾选列表里的上游。</summary>
+    public bool IsProviderSelected(string providerKey) =>
+        IsAllProviders || _providerPicks.FirstOrDefault(pick => pick.Key == providerKey)?.IsChecked == true;
+
+    public void UpdateProviders(IReadOnlyList<(string Key, string Display)> picks)
     {
-        _models.Clear();
-        _models.AddRange(choices);
-        Raise(nameof(Models));
-        if (SelectedModel is null || choices.All(choice => choice.Id != SelectedModel.Id))
+        var previous = _providerPicks.ToDictionary(pick => pick.Key, pick => pick.IsChecked);
+        _providerPicks.Clear();
+        foreach (var (key, display) in picks)
         {
-            SelectedModel = choices.FirstOrDefault();
+            _providerPicks.Add(new ProxyProviderPickItemViewModel(key, display)
+            {
+                IsChecked = previous.GetValueOrDefault(key, true)
+            });
         }
+        Raise(nameof(ProviderPicks));
         Raise(nameof(ConfigFileText));
     }
 
-    public void RefreshLocalization() => Raise(nameof(ConfigFileText));
+    public void ApplyScope(ProxyClientSyncScope scope)
+    {
+        IsAllProviders = scope.AllProviders;
+        if (!scope.AllProviders)
+        {
+            foreach (var pick in _providerPicks)
+            {
+                pick.IsChecked = scope.ProviderKeys.Contains(pick.Key);
+            }
+        }
+    }
+
+    public ProxyClientSyncScope CaptureScope() => new()
+    {
+        AllProviders = IsAllProviders,
+        ProviderKeys = [.. _providerPicks.Where(pick => pick.IsChecked).Select(pick => pick.Key)]
+    };
+
+    public void RefreshLocalization()
+    {
+        Raise(nameof(ConfigFileText));
+        Raise(nameof(ScopeOptions));
+        Raise(nameof(ScopeIndex));
+    }
+}
+
+/// <summary>同步范围勾选列表中的一行上游 Provider。</summary>
+public sealed class ProxyProviderPickItemViewModel(string key, string display) : ViewModelBase
+{
+    private bool _isChecked = true;
+
+    public string Key { get; } = key;
+    public string Display { get; } = display;
+    public bool IsChecked { get => _isChecked; set => Set(ref _isChecked, value); }
 }
 
 /// <summary>导入对话框中的一行：远端模型 id + 匹配到的 models.dev 元数据。</summary>

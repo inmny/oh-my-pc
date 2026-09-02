@@ -79,6 +79,7 @@ public sealed class MainViewModel : ViewModelBase
         Vpn = vpn;
         NotificationCenter = notificationCenter;
         Proxy = proxy;
+        Proxy.PersistScopeAsync = SaveProxyClientScopeAsync;
         _localApi = localApi;
         _startup = startup;
         _text = text;
@@ -165,6 +166,7 @@ public sealed class MainViewModel : ViewModelBase
         await Vpn.LoadAsync();
         await NotificationCenter.LoadAsync(Settings.NotificationHistoryRetentionDays);
         await Proxy.InitializeAsync();
+        Proxy.ApplyClientScopes(Settings.ClientSyncScopes);
         RefreshUsageLocalization();
         LastUpdated = _text.Format("Status_Updated", DateTime.Now);
     }
@@ -324,7 +326,25 @@ public sealed class MainViewModel : ViewModelBase
         LocalApiEnabled = settings.LocalApiEnabled,
         LocalApiPort = settings.LocalApiPort,
         NotificationHistoryRetentionDays = settings.NotificationHistoryRetentionDays,
-        CliProxyAutoStart = settings.CliProxyAutoStart
+        CliProxyAutoStart = settings.CliProxyAutoStart,
+        ClientSyncScopes = settings.ClientSyncScopes.ToDictionary(
+            pair => pair.Key,
+            pair => CloneScope(pair.Value))
+    };
+
+    /// <summary>同步完成后保存客户端同步范围。基于磁盘上的最新设置写入，避免把设置页未保存的编辑一并落盘。</summary>
+    private async Task SaveProxyClientScopeAsync(ProxyClientKind kind, ProxyClientSyncScope scope)
+    {
+        var stored = await _store.GetSettingsAsync();
+        stored.ClientSyncScopes[kind.ToString()] = CloneScope(scope);
+        await _store.SaveSettingsAsync(stored);
+        Settings.ClientSyncScopes[kind.ToString()] = CloneScope(scope);
+    }
+
+    private static ProxyClientSyncScope CloneScope(ProxyClientSyncScope scope) => new()
+    {
+        AllProviders = scope.AllProviders,
+        ProviderKeys = [.. scope.ProviderKeys]
     };
 
     private void RefreshLocalApiStatus()

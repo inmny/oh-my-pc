@@ -1447,43 +1447,48 @@
                                                                HorizontalAlignment="Right"
                                                                VerticalAlignment="Center" />
                                                 </Grid>
-                                                <Grid>
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="*" />
-                                                        <ColumnDefinition Width="14" />
-                                                        <ColumnDefinition Width="130" />
-                                                        <ColumnDefinition Width="14" />
-                                                        <ColumnDefinition Width="Auto" />
-                                                    </Grid.ColumnDefinitions>
-                                                    <Grid.RowDefinitions>
-                                                        <RowDefinition Height="Auto" />
-                                                        <RowDefinition Height="Auto" />
-                                                    </Grid.RowDefinitions>
-                                                    <StackPanel>
-                                                        <Label Content="{DynamicResource Proxy_DefaultModel}" />
-                                                        <ComboBox ItemsSource="{Binding Models}"
-                                                                  SelectedItem="{Binding SelectedModel, Mode=TwoWay}"
-                                                                  DisplayMemberPath="Display" />
-                                                    </StackPanel>
-                                                    <StackPanel Grid.Column="2">
-                                                        <Label Content="{DynamicResource Proxy_DefaultEffort}" />
-                                                        <ComboBox ItemsSource="{Binding Efforts}"
-                                                                  SelectedItem="{Binding SelectedEffort, Mode=TwoWay}" />
-                                                    </StackPanel>
-                                                    <Button Grid.Column="4"
-                                                            Grid.RowSpan="2"
-                                                            Content="{DynamicResource Proxy_Sync}"
-                                                            Command="{Binding DataContext.Proxy.SyncClientCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                            CommandParameter="{Binding Client}"
-                                                            VerticalAlignment="Center"
-                                                            Style="{StaticResource PrimaryButton}" />
-                                                    <TextBlock Grid.Row="1" Grid.ColumnSpan="5"
-                                                               Text="{Binding LastSyncText}"
-                                                               Style="{StaticResource MutedText}"
-                                                               FontSize="12"
-                                                               Margin="0,10,0,0"
-                                                               TextWrapping="Wrap" />
-                                                </Grid>
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="14" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+                                                <StackPanel>
+                                                    <Label Content="{DynamicResource Proxy_SyncScope}" />
+                                                    <ComboBox ItemsSource="{Binding ScopeOptions}"
+                                                              SelectedIndex="{Binding ScopeIndex, Mode=TwoWay}" />
+                                                </StackPanel>
+                                                <ItemsControl Grid.Row="1"
+                                                              ItemsSource="{Binding ProviderPicks}"
+                                                              Margin="0,10,0,0"
+                                                              Visibility="{Binding ShowProviderPicks, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <CheckBox Content="{Binding Display}"
+                                                                      IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                                                      Margin="0,3,0,3" />
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                                <Button Grid.Column="2"
+                                                        Grid.RowSpan="3"
+                                                        Content="{DynamicResource Proxy_Sync}"
+                                                        Command="{Binding DataContext.Proxy.SyncClientCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding Client}"
+                                                        VerticalAlignment="Center"
+                                                        Style="{StaticResource PrimaryButton}" />
+                                                <TextBlock Grid.Row="2" Grid.ColumnSpan="3"
+                                                           Text="{Binding LastSyncText}"
+                                                           Style="{StaticResource MutedText}"
+                                                           FontSize="12"
+                                                           Margin="0,10,0,0"
+                                                           TextWrapping="Wrap" />
+                                            </Grid>
                                             </StackPanel>
                                         </Border>
                                     </DataTemplate>

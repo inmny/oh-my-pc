@@ -129,6 +129,16 @@ public sealed class ProxyInstallResult
 /// <summary>待同步的一个模型及其所属上游的协议类型（决定写入客户端时的 API 格式）。</summary>
 public sealed record ClientSyncModel(ProxyModelConfig Config, ProxyProviderKind Kind);
 
+/// <summary>直连模式下的一个上游：客户端按各自原生规范直接指向该上游，不经网关。</summary>
+public sealed record ClientSyncUpstream(
+    string Key,
+    string DisplayName,
+    string BaseUrl,
+    string ApiKey,
+    ProxyProviderKind Kind,
+    IReadOnlyList<ProxyModelConfig> Models);
+
+/// <summary>一次客户端同步的输入：Models 为经网关的全部模式；Upstreams 非空时为直连模式，两者互斥。默认模型不在管辖范围内。</summary>
 public sealed class ClientSyncPlan
 {
     public ProxyClientKind Client { get; init; }
@@ -136,13 +146,20 @@ public sealed class ClientSyncPlan
     public string BaseUrl { get; init; } = "";
     public string ApiKey { get; init; } = "";
     public IReadOnlyList<ClientSyncModel> Models { get; init; } = [];
-    public string? DefaultModelId { get; init; }
-    public string? DefaultEffort { get; init; }
+    public IReadOnlyList<ClientSyncUpstream> Upstreams { get; init; } = [];
 }
 
 public sealed class ClientSyncResult
 {
     public IReadOnlyList<string> WrittenFiles { get; init; } = [];
     public string ProviderId { get; init; } = "";
-    public string? DefaultModel { get; init; }
+    /// <summary>按客户端侧模型标识去重后的写入数量。</summary>
+    public int ModelCount { get; init; }
+}
+
+/// <summary>单个客户端的同步范围：全部上游，或按 "apiKey|baseUrl" 指定的上游子集。</summary>
+public sealed class ProxyClientSyncScope
+{
+    public bool AllProviders { get; set; } = true;
+    public List<string> ProviderKeys { get; set; } = [];
 }

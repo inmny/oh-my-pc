@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using OhMyPc.Core;
@@ -45,6 +47,13 @@ public sealed class CliProxyClientConfigurator(
         if (!DirectoryExistsFor(_zcodeDesktopConfig) && !DirectoryExistsFor(_zcodeCliConfig))
             throw new InvalidOperationException("未找到 zcode 配置目录（~/.zcode）。");
 
+        return plan.Upstreams.Count > 0
+            ? await SyncZcodeDirectAsync(plan, cancellationToken)
+            : await SyncZcodeGatewayAsync(plan, cancellationToken);
+    }
+
+    private async Task<ClientSyncResult> SyncZcodeGatewayAsync(ClientSyncPlan plan, CancellationToken cancellationToken)
+    {
         // zcode 只支持 anthropic 与 openai(responses) 两种 API 格式：按上游协议类型拆成两个 provider 条目。
         var anthropicModels = plan.Models.Where(model => model.Kind == ProxyProviderKind.Claude).Select(model => model.Config).ToList();
         var openaiModels = plan.Models.Where(model => model.Kind == ProxyProviderKind.Codex).Select(model => model.Config).ToList();
@@ -63,32 +72,53 @@ public sealed class CliProxyClientConfigurator(
             anthropicId ??= DetectProviderId(providers, plan.BaseUrl, "anthropic") ?? plan.ProviderId;
             openaiId ??= DetectProviderId(providers, plan.BaseUrl, "openai") ?? $"{plan.ProviderId}-codex";
 
-            if (anthropicModels.Count > 0)
-            {
-                var provider = UpsertZcodeProvider(providers, anthropicId, "anthropic", "CLIProxyAPI", plan, isCliConfig);
-                SyncZcodeModels(provider, anthropicModels);
-            }
-            if (openaiModels.Count > 0)
-            {
-                var provider = UpsertZcodeProvider(providers, openaiId, "openai", "CLIProxyAPI Codex", plan, isCliConfig);
-                SyncZcodeModels(provider, openaiModels);
-            }
+            // 两个协议组都无条件 upsert：组内模型为空时清空既有模型，客户端可见模型始终等于本次同步范围。
+            var anthropicProvider = UpsertZcodeProvider(providers, anthropicId, "anthropic", "CLIProxyAPI", plan.ApiKey, plan.BaseUrl, isCliConfig);
+            SyncZcodeModels(anthropicProvider, anthropicModels);
+            var openaiProvider = UpsertZcodeProvider(providers, openaiId, "openai", "CLIProxyAPI Codex", plan.ApiKey, EnsureV1(plan.BaseUrl), isCliConfig);
+            SyncZcodeModels(openaiProvider, openaiModels);
+            RemoveDanglingDefaultModel(root, RemoveDirectEntries(providers, keep: []));
 
-            if (plan.DefaultModelId is not null)
-            {
-                var defaultIsCodex = plan.Models.Any(model =>
-                    model.Kind == ProxyProviderKind.Codex
-                    && string.Equals(model.Config.GetId(), plan.DefaultModelId, StringComparison.OrdinalIgnoreCase));
-                root["model"] = $"{(defaultIsCodex ? openaiId : anthropicId)}/{plan.DefaultModelId}";
-            }
             await WriteAsync(path, root, cancellationToken);
             written.Add(path);
         }
         return BuildResult(anthropicId ?? plan.ProviderId, written, plan);
     }
 
+    /// <summary>直连模式：每个上游一个 provider 条目，指向其真实地址与密钥，模型用上游真实名。</summary>
+    private async Task<ClientSyncResult> SyncZcodeDirectAsync(ClientSyncPlan plan, CancellationToken cancellationToken)
+    {
+        var written = new List<string>();
+        foreach (var (path, isCliConfig) in new[]
+                 {
+                     (_zcodeDesktopConfig, false),
+                     (_zcodeCliConfig, true)
+                 })
+        {
+            var root = await ReadJsonObjectAsync(path, cancellationToken);
+            var providers = GetOrCreateObject(root, "provider");
+            var keep = new List<string>();
+            foreach (var upstream in plan.Upstreams)
+            {
+                var kind = upstream.Kind == ProxyProviderKind.Claude ? "anthropic" : "openai";
+                var id = DirectId(upstream.Key);
+                keep.Add(id);
+                // openai SDK 只拼 /responses，需要带 /v1 的地址；anthropic SDK 自拼 /v1/messages，用上游根地址
+                var baseUrl = upstream.Kind == ProxyProviderKind.Claude ? upstream.BaseUrl.TrimEnd('/') : EnsureV1(upstream.BaseUrl);
+                var provider = UpsertZcodeProvider(providers, id, kind, upstream.DisplayName, upstream.ApiKey, baseUrl, isCliConfig);
+                SyncZcodeModels(provider, [.. upstream.Models.Select(WithoutAlias)]);
+            }
+            RemoveDanglingDefaultModel(root, RemoveGatewayEntries(providers, plan.BaseUrl));
+            RemoveDanglingDefaultModel(root, RemoveDirectEntries(providers, keep));
+
+            await WriteAsync(path, root, cancellationToken);
+            written.Add(path);
+        }
+        return BuildResult("direct", written, plan);
+    }
+
     private static JsonObject UpsertZcodeProvider(
-        JsonObject providers, string providerId, string kind, string displayName, ClientSyncPlan plan, bool isCliConfig)
+        JsonObject providers, string providerId, string kind, string displayName, string apiKey, string baseUrl, bool isCliConfig)
     {
         var provider = GetOrCreateObject(providers, providerId);
         provider["name"] = displayName;
@@ -102,14 +132,20 @@ public sealed class CliProxyClientConfigurator(
             provider["npm"] = kind == "openai" ? "@ai-sdk/openai" : "@ai-sdk/anthropic";
         }
         var options = GetOrCreateObject(provider, "options");
-        options["apiKey"] = plan.ApiKey;
-        options["baseURL"] = plan.BaseUrl;
+        options["apiKey"] = apiKey;
+        // anthropic SDK 在 baseURL 后拼 /v1/messages，用根地址；openai SDK 只拼 /responses，必须自带 /v1
+        options["baseURL"] = kind == "openai" ? baseUrl.TrimEnd('/') : baseUrl;
         return provider;
     }
 
-    /// <summary>模型列表以本次同步为准：upsert 计划内模型，移除不在计划内的旧条目（修复早期按单一协议同步留下的混排状态）。</summary>
+    /// <summary>模型列表以本次同步为准：upsert 计划内模型，移除不在计划内的旧条目；计划为空时移除整个 models 键。</summary>
     private static void SyncZcodeModels(JsonObject provider, IReadOnlyList<ProxyModelConfig> models)
     {
+        if (models.Count == 0)
+        {
+            provider.Remove("models");
+            return;
+        }
         var target = GetOrCreateObject(provider, "models");
         foreach (var model in models)
         {
@@ -130,27 +166,58 @@ public sealed class CliProxyClientConfigurator(
 
         var root = await ReadJsonObjectAsync(path, cancellationToken);
         var providers = GetOrCreateObject(root, "provider");
-        var providerId = DetectProviderId(providers, $"{plan.BaseUrl}/v1", kind: null) ?? plan.ProviderId;
-        var provider = GetOrCreateObject(providers, providerId);
-        provider["name"] = DisplayName;
-        provider["npm"] = "@ai-sdk/openai-compatible";
-        var options = GetOrCreateObject(provider, "options");
-        options["apiKey"] = plan.ApiKey;
-        options["baseURL"] = $"{plan.BaseUrl}/v1";
-        var models = GetOrCreateObject(provider, "models");
-        var keep = plan.Models.Select(model => model.Config.GetId()).ToHashSet(StringComparer.Ordinal);
-        foreach (var model in plan.Models)
+        if (plan.Upstreams.Count > 0)
         {
-            UpsertModel(models, model.Config.GetId(), ProxyMappers.ToOpencodeModel(model.Config));
+            var keep = new List<string>();
+            foreach (var upstream in plan.Upstreams)
+            {
+                var id = DirectId(upstream.Key);
+                keep.Add(id);
+                var provider = GetOrCreateObject(providers, id);
+                provider["name"] = upstream.DisplayName;
+                provider["npm"] = "@ai-sdk/openai-compatible";
+                var options = GetOrCreateObject(provider, "options");
+                options["apiKey"] = upstream.ApiKey;
+                // openai-compatible SDK 拼 /chat/completions，实测中转站 chat 端点都在 /v1 下（Heju 等已带 /v1 的原样保留）
+                options["baseURL"] = EnsureV1(upstream.BaseUrl);
+                UpsertOpencodeModels(GetOrCreateObject(provider, "models"), [.. upstream.Models.Select(WithoutAlias)]);
+            }
+            RemoveDanglingDefaultModel(root, RemoveGatewayEntries(providers, plan.BaseUrl));
+            RemoveDanglingDefaultModel(root, RemoveDirectEntries(providers, keep));
+            await WriteAsync(path, root, cancellationToken);
+            return BuildResult("direct", [path], plan);
         }
-        // 权威模式：移除不在本次同步内的旧条目（如 EasyCPA 时代已不可路由的小写 id）
+
+        var providerId = DetectProviderId(providers, $"{plan.BaseUrl}/v1", kind: null) ?? plan.ProviderId;
+        var gatewayProvider = GetOrCreateObject(providers, providerId);
+        gatewayProvider["name"] = DisplayName;
+        gatewayProvider["npm"] = "@ai-sdk/openai-compatible";
+        var gatewayOptions = GetOrCreateObject(gatewayProvider, "options");
+        gatewayOptions["apiKey"] = plan.ApiKey;
+        gatewayOptions["baseURL"] = $"{plan.BaseUrl}/v1";
+        UpsertOpencodeModels(GetOrCreateObject(gatewayProvider, "models"), [.. plan.Models.Select(model => model.Config)]);
+        RemoveDanglingDefaultModel(root, RemoveDirectEntries(providers, keep: []));
+        await WriteAsync(path, root, cancellationToken);
+        return BuildResult(providerId, [path], plan);
+    }
+
+    /// <summary>权威覆盖 provider 的模型表：计划为空时移除整个 models 键。</summary>
+    private static void UpsertOpencodeModels(JsonObject models, IReadOnlyList<ProxyModelConfig> configs)
+    {
+        if (configs.Count == 0)
+        {
+            models.Clear();
+            return;
+        }
+        foreach (var model in configs)
+        {
+            UpsertModel(models, model.GetId(), ProxyMappers.ToOpencodeModel(model));
+        }
+        var keep = configs.Select(model => model.GetId()).ToHashSet(StringComparer.Ordinal);
         foreach (var id in models.Select(pair => pair.Key).ToList())
         {
             if (!keep.Contains(id)) models.Remove(id);
         }
-        if (plan.DefaultModelId is not null) root["model"] = $"{providerId}/{plan.DefaultModelId}";
-        await WriteAsync(path, root, cancellationToken);
-        return BuildResult(providerId, [path], plan);
     }
 
     private async Task<ClientSyncResult> SyncDshAsync(ClientSyncPlan plan, CancellationToken cancellationToken)
@@ -158,15 +225,79 @@ public sealed class CliProxyClientConfigurator(
         if (!DirectoryExistsFor(_dshSettings))
             throw new InvalidOperationException("未找到 dsh 配置目录（~/.dsh）。");
 
+        var root = await YamlTree.ReadRootAsync(_dshSettings, cancellationToken);
+        var providers = YamlTree.GetOrCreateMapping(YamlTree.GetOrCreateMapping(root, "llm-pi-ai"), "providers");
+        var gatewayBase = plan.BaseUrl.TrimEnd('/');
+        ClientSyncResult result;
+        if (plan.Upstreams.Count > 0)
+        {
+            result = await WriteDshDirectAsync(plan, root, providers, gatewayBase, cancellationToken);
+        }
+        else
+        {
+            result = await WriteDshGatewayAsync(plan, root, providers, gatewayBase, cancellationToken);
+        }
+
+        ConfigFileSafety.WriteAllText(_dshSettings, YamlTree.Save(root));
+        return result;
+    }
+
+    /// <summary>agent-default-model 指向本次被移除的 provider 时一并清掉，避免悬空；其余默认选择不动。</summary>
+    private static void RemoveDanglingDshDefault(YamlMappingNode root, YamlMappingNode providers, IReadOnlyList<string> removedIds)
+    {
+        if (removedIds.Count == 0) return;
+        if (root.Children.All(pair => (pair.Key as YamlScalarNode)?.Value != "agent-default-model")) return;
+        var agentDefault = (YamlMappingNode)root.Children.First(pair => (pair.Key as YamlScalarNode)?.Value == "agent-default-model").Value;
+        var providerId = YamlTree.Scalar(agentDefault, "provider");
+        if (providerId is not null && removedIds.Contains(providerId))
+        {
+            YamlTree.Remove(root, "agent-default-model");
+        }
+    }
+
+    /// <summary>直连模式：每个上游一个协议组，密钥写入独立的凭据引用；网关组一并移除。</summary>
+    private async Task<ClientSyncResult> WriteDshDirectAsync(
+        ClientSyncPlan plan, YamlMappingNode root, YamlMappingNode providers, string gatewayBase, CancellationToken cancellationToken)
+    {
+        var credentials = await YamlTree.ReadRootAsync(_dshCredentials, cancellationToken);
+        var refs = YamlTree.GetOrCreateMapping(credentials, "refs");
+        var keep = new List<string>();
+        foreach (var upstream in plan.Upstreams)
+        {
+            var id = DirectId(upstream.Key);
+            keep.Add(id);
+            var envName = DirectEnvName(id);
+            var api = upstream.Kind == ProxyProviderKind.Claude ? "anthropic-messages" : "openai-responses";
+            var baseUrl = upstream.Kind == ProxyProviderKind.Claude ? upstream.BaseUrl.TrimEnd('/') : EnsureV1(upstream.BaseUrl);
+            WriteDshGroup(providers, id, api, upstream.DisplayName, envName, baseUrl, [.. upstream.Models.Select(WithoutAlias)], removeWhenEmpty: true);
+            refs.Children[YamlTree.Key(envName)] = YamlTree.Text(upstream.ApiKey);
+        }
+        var removed = DshGatewayProviders(providers, gatewayBase).Select(entry => entry.Id).Distinct().ToList();
+        foreach (var id in removed)
+        {
+            YamlTree.Remove(providers, id);
+        }
+        foreach (var (id, _) in providers.Children.ToList())
+        {
+            if ((id as YamlScalarNode)?.Value is { } name && name.StartsWith("direct-", StringComparison.Ordinal) && !keep.Contains(name))
+            {
+                YamlTree.Remove(providers, name);
+                removed.Add(name);
+            }
+        }
+        RemoveDanglingDshDefault(root, providers, removed);
+        ConfigFileSafety.WriteAllText(_dshCredentials, YamlTree.Save(credentials));
+        return BuildResult("direct", [_dshSettings, _dshCredentials], plan);
+    }
+
+    private async Task<ClientSyncResult> WriteDshGatewayAsync(
+        ClientSyncPlan plan, YamlMappingNode root, YamlMappingNode providers, string gatewayBase, CancellationToken cancellationToken)
+    {
         // dsh 支持 anthropic-messages / openai-completions / openai-responses：
         // Claude 上游走 anthropic-messages（原生协议，baseURL 为网关根地址），
         // Codex 上游走 openai-responses（baseURL 带 /v1）。
         var anthropicModels = plan.Models.Where(model => model.Kind == ProxyProviderKind.Claude).Select(model => model.Config).ToList();
         var responsesModels = plan.Models.Where(model => model.Kind == ProxyProviderKind.Codex).Select(model => model.Config).ToList();
-
-        var root = await YamlTree.ReadRootAsync(_dshSettings, cancellationToken);
-        var providers = YamlTree.GetOrCreateMapping(YamlTree.GetOrCreateMapping(root, "llm-pi-ai"), "providers");
-        var gatewayBase = plan.BaseUrl.TrimEnd('/');
         var existing = DshGatewayProviders(providers, gatewayBase).ToList();
         // anthropic 组优先复用既有 anthropic-messages 条目；否则升级复用旧 openai-completions 条目的 id
         var anthropicId = existing.FirstOrDefault(entry => entry.Api == "anthropic-messages").Id
@@ -177,18 +308,16 @@ public sealed class CliProxyClientConfigurator(
 
         WriteDshGroup(providers, anthropicId, "anthropic-messages", "CLIProxyAPI", envName, gatewayBase, anthropicModels, removeWhenEmpty: existing.Any(entry => entry.Id == anthropicId));
         WriteDshGroup(providers, responsesId, "openai-responses", "CLIProxyAPI Responses", envName, $"{gatewayBase}/v1", responsesModels, removeWhenEmpty: existing.Any(entry => entry.Id == responsesId));
-
-        if (plan.DefaultModelId is not null)
+        var removed = new List<string>();
+        foreach (var (id, _) in providers.Children.ToList())
         {
-            var defaultIsCodex = plan.Models.Any(model =>
-                model.Kind == ProxyProviderKind.Codex
-                && string.Equals(model.Config.GetId(), plan.DefaultModelId, StringComparison.OrdinalIgnoreCase));
-            var agentDefault = YamlTree.GetOrCreateMapping(root, "agent-default-model");
-            YamlTree.SetScalar(agentDefault, "provider", defaultIsCodex ? responsesId : anthropicId);
-            YamlTree.SetScalar(agentDefault, "model", plan.DefaultModelId);
-            if (plan.DefaultEffort is not null) YamlTree.SetScalar(agentDefault, "reasoningEffort", plan.DefaultEffort);
+            if ((id as YamlScalarNode)?.Value is { } name && name.StartsWith("direct-", StringComparison.Ordinal))
+            {
+                YamlTree.Remove(providers, name);
+                removed.Add(name);
+            }
         }
-        ConfigFileSafety.WriteAllText(_dshSettings, YamlTree.Save(root));
+        RemoveDanglingDshDefault(root, providers, removed);
 
         var credentials = await YamlTree.ReadRootAsync(_dshCredentials, cancellationToken);
         var refs = YamlTree.GetOrCreateMapping(credentials, "refs");
@@ -259,8 +388,77 @@ public sealed class CliProxyClientConfigurator(
     {
         WrittenFiles = written,
         ProviderId = providerId,
-        DefaultModel = plan.DefaultModelId is null ? null : $"{providerId}/{plan.DefaultModelId}"
+        // 直连模式下各上游的模型命名空间相互独立，按组内计数求和
+        ModelCount = plan.Upstreams.Count > 0
+            ? plan.Upstreams.Sum(upstream => upstream.Models.Count)
+            : plan.Models.Select(model => model.Config.GetId()).Distinct(StringComparer.OrdinalIgnoreCase).Count()
     };
+
+    /// <summary>直连条目的确定性 id：上游标识（api-key|base-url）的短哈希，同步多次结果稳定。</summary>
+    public static string DirectId(string upstreamKey) =>
+        "direct-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(upstreamKey)))[..8].ToLowerInvariant();
+
+    private static string DirectEnvName(string directId) =>
+        "DIRECT_" + directId["direct-".Length..].ToUpperInvariant() + "_API_KEY";
+
+    /// <summary>OpenAI 系端点实测都挂在 /v1 之下（Heju 等地址本身已带 /v1 的原样保留）。</summary>
+    private static string EnsureV1(string baseUrl)
+    {
+        var trimmed = baseUrl.TrimEnd('/');
+        return trimmed.EndsWith("/v1", StringComparison.OrdinalIgnoreCase) ? trimmed : $"{trimmed}/v1";
+    }
+
+    /// <summary>直连时模型用上游真实名；别名只对网关路由有意义。</summary>
+    private static ProxyModelConfig WithoutAlias(ProxyModelConfig model) => new()
+    {
+        Name = model.Name,
+        Alias = null,
+        ThinkingLevels = model.ThinkingLevels,
+        MaxContextLength = model.MaxContextLength,
+        InputModalities = model.InputModalities,
+        OutputModalities = model.OutputModalities,
+        Cost = model.Cost
+    };
+
+    /// <summary>移除指向网关的 provider 条目（全部→指定切换后，网关别名不再可用），返回被移除的条目 id。</summary>
+    private static List<string> RemoveGatewayEntries(JsonObject providers, string gatewayBaseUrl)
+    {
+        var removed = new List<string>();
+        if (string.IsNullOrWhiteSpace(gatewayBaseUrl)) return removed;
+        foreach (var (id, node) in providers.ToList())
+        {
+            if (node is not JsonObject entry) continue;
+            var existing = (string?)entry["options"]?["baseURL"];
+            if (existing is null || !existing.TrimEnd('/').StartsWith(gatewayBaseUrl.TrimEnd('/'), StringComparison.OrdinalIgnoreCase)) continue;
+            providers.Remove(id);
+            removed.Add(id);
+        }
+        return removed;
+    }
+
+    /// <summary>移除本次未保留的 direct- 前缀条目，返回被移除的条目 id。</summary>
+    private static List<string> RemoveDirectEntries(JsonObject providers, IReadOnlyList<string> keep)
+    {
+        var removed = new List<string>();
+        foreach (var (id, _) in providers.ToList())
+        {
+            if (id.StartsWith("direct-", StringComparison.Ordinal) && !keep.Contains(id))
+            {
+                providers.Remove(id);
+                removed.Add(id);
+            }
+        }
+        return removed;
+    }
+
+    /// <summary>默认模型指向本次被移除的 provider 时一并清掉引用，避免悬空；其余默认选择不动。</summary>
+    private static void RemoveDanglingDefaultModel(JsonObject root, IReadOnlyList<string> removedIds)
+    {
+        if (removedIds.Count == 0 || (string?)root["model"] is not { } reference) return;
+        var separator = reference.IndexOf('/');
+        if (separator <= 0) return;
+        if (removedIds.Contains(reference[..separator])) root.Remove("model");
+    }
 
     private static async Task<JsonObject> ReadJsonObjectAsync(string path, CancellationToken cancellationToken)
     {
