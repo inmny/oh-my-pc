@@ -5,6 +5,7 @@
 *.user
 *.suo
 TestResults/
+artifacts/
 
 # Node dependencies and local tool output
 **/node_modules/
