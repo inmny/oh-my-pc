@@ -1564,7 +1564,10 @@
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
-                                    <CheckBox Content="{DynamicResource Settings_EnableDanmaku}" IsChecked="{Binding Settings.DanmakuEnabled}" Margin="0,0,0,14" />
+                                    <StackPanel>
+                                        <CheckBox Content="{DynamicResource Settings_EnableDanmaku}" IsChecked="{Binding Settings.DanmakuEnabled}" Margin="0,0,0,8" />
+                                        <CheckBox Content="{DynamicResource Settings_HoldWhenAway}" IsChecked="{Binding Settings.DanmakuHoldWhenAway}" Margin="0,0,0,14" />
+                                    </StackPanel>
                                     <Grid Grid.Row="1" Margin="0,0,0,12">
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="64" /></Grid.ColumnDefinitions>
                                         <TextBlock Text="{DynamicResource Settings_Opacity}" VerticalAlignment="Center" />

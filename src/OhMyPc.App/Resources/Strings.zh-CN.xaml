@@ -256,6 +256,10 @@
     <sys:String x:Key="Settings_Danmaku">弹幕</sys:String>
     <sys:String x:Key="Settings_DanmakuDescription">弹幕的显示时间和外观</sys:String>
     <sys:String x:Key="Settings_EnableDanmaku">启用弹幕浮层</sys:String>
+    <sys:String x:Key="Settings_HoldWhenAway">离开电脑时暂存弹幕，回来后合并补播</sys:String>
+    <sys:String x:Key="Danmaku_BacklogCountFormat">（离开期间同类通知 ×{0}）</sys:String>
+    <sys:String x:Key="Danmaku_BacklogSummaryTitle">通知摘要</sys:String>
+    <sys:String x:Key="Danmaku_BacklogSummaryFormat">离开期间通知过多，最早的 {0} 条已合并丢弃</sys:String>
     <sys:String x:Key="Settings_Opacity">不透明度</sys:String>
     <sys:String x:Key="Settings_Speed">速度（像素/秒）</sys:String>
     <sys:String x:Key="Settings_FontSize">字号</sys:String>

@@ -255,6 +255,10 @@
     <sys:String x:Key="Settings_Danmaku">Danmaku</sys:String>
     <sys:String x:Key="Settings_DanmakuDescription">Overlay timing and appearance</sys:String>
     <sys:String x:Key="Settings_EnableDanmaku">Enable danmaku overlay</sys:String>
+    <sys:String x:Key="Settings_HoldWhenAway">Hold danmaku while away, merged replay on return</sys:String>
+    <sys:String x:Key="Danmaku_BacklogCountFormat">(×{0} similar while away)</sys:String>
+    <sys:String x:Key="Danmaku_BacklogSummaryTitle">Notification digest</sys:String>
+    <sys:String x:Key="Danmaku_BacklogSummaryFormat">Too many notifications while away; the oldest {0} were merged away</sys:String>
     <sys:String x:Key="Settings_Opacity">Opacity</sys:String>
     <sys:String x:Key="Settings_Speed">Speed (px/s)</sys:String>
     <sys:String x:Key="Settings_FontSize">Font size</sys:String>

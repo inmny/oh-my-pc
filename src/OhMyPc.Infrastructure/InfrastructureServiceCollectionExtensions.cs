@@ -9,6 +9,7 @@ using OhMyPc.Infrastructure.LocalApi;
 using OhMyPc.Infrastructure.LocalUsage;
 using OhMyPc.Infrastructure.Notifications;
 using OhMyPc.Infrastructure.Persistence;
+using OhMyPc.Infrastructure.Presence;
 using OhMyPc.Infrastructure.Providers;
 using OhMyPc.Infrastructure.Vpn;
 
@@ -29,6 +30,9 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<INotificationFeed>(provider => provider.GetRequiredService<NotificationCenterService>());
         services.AddSingleton<LocalNotificationApiService>();
         services.AddSingleton<IHostedService>(provider => provider.GetRequiredService<LocalNotificationApiService>());
+        services.AddSingleton<UserPresenceService>();
+        services.AddSingleton<IUserPresenceService>(provider => provider.GetRequiredService<UserPresenceService>());
+        services.AddHostedService(provider => provider.GetRequiredService<UserPresenceService>());
 
         services.AddSingleton<AutomationRuleMatcher>();
         services.AddSingleton<IAutomationActionHandler, LocalNotificationActionHandler>();

@@ -306,6 +306,7 @@ public sealed class AppSettings
     public bool StartWithWindows { get; set; } = true;
     public bool NotificationsEnabled { get; set; } = true;
     public bool DanmakuEnabled { get; set; } = true;
+    public bool DanmakuHoldWhenAway { get; set; } = true;
     public string QuietHoursStart { get; set; } = "23:00";
     public string QuietHoursEnd { get; set; } = "08:00";
     public double DanmakuOpacity { get; set; } = 0.92;

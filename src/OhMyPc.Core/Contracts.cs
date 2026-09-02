@@ -78,6 +78,13 @@ public interface INotificationFeed
     event EventHandler<NotificationRecord>? Published;
 }
 
+/// <summary>用户是否在电脑前：空闲超时或会话锁定视为离开，出现输入或解锁即恢复。</summary>
+public interface IUserPresenceService
+{
+    bool IsAway { get; }
+    event EventHandler? StateChanged;
+}
+
 public interface ITextLocalizer
 {
     string this[string key] { get; }

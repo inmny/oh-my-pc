@@ -314,6 +314,7 @@ public sealed class MainViewModel : ViewModelBase
         StartWithWindows = settings.StartWithWindows,
         NotificationsEnabled = settings.NotificationsEnabled,
         DanmakuEnabled = settings.DanmakuEnabled,
+        DanmakuHoldWhenAway = settings.DanmakuHoldWhenAway,
         QuietHoursStart = settings.QuietHoursStart,
         QuietHoursEnd = settings.QuietHoursEnd,
         DanmakuOpacity = settings.DanmakuOpacity,
