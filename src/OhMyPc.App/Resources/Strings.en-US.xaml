@@ -249,6 +249,14 @@
     <sys:String x:Key="Language_EnUS">English</sys:String>
     <sys:String x:Key="Settings_StartWithWindows">Start with Windows</sys:String>
     <sys:String x:Key="Settings_CliProxyAutoStart">Start CLIProxyAPI together with Oh My PC</sys:String>
+    <sys:String x:Key="Settings_UpdateCheck">Check for app updates every hour (installed builds only)</sys:String>
+    <sys:String x:Key="Settings_Version">Current version</sys:String>
+    <sys:String x:Key="Update_NotificationTitle">oh-my-pc update</sys:String>
+    <sys:String x:Key="Update_NotificationBody">New version {0} available. Click "Update now" in the main window banner to upgrade and restart.</sys:String>
+    <sys:String x:Key="Update_BannerFound">New version {0} available</sys:String>
+    <sys:String x:Key="Update_BannerDownloading">Downloading update…{0}%</sys:String>
+    <sys:String x:Key="Update_BannerFailed">Update failed: {0}</sys:String>
+    <sys:String x:Key="Update_InstallNow">Update now</sys:String>
     <sys:String x:Key="Settings_EnableNotifications">Enable notifications</sys:String>
     <sys:String x:Key="Settings_NotificationRetention">Keep notification history</sys:String>
     <sys:String x:Key="Settings_Retention7Days">7 days</sys:String>

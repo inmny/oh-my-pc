@@ -11,6 +11,7 @@ using OhMyPc.Infrastructure.Notifications;
 using OhMyPc.Infrastructure.Persistence;
 using OhMyPc.Infrastructure.Presence;
 using OhMyPc.Infrastructure.Providers;
+using OhMyPc.Infrastructure.Updates;
 using OhMyPc.Infrastructure.Vpn;
 
 namespace OhMyPc.Infrastructure;
@@ -108,6 +109,9 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<ICliProxyProcessService, CliProxyProcessService>();
         services.AddHostedService<CliProxyProcessWorker>();
         services.AddSingleton<IClientConfigurator, CliProxyClientConfigurator>();
+
+        services.AddSingleton<UpdateCheckService>();
+        services.AddHostedService(provider => provider.GetRequiredService<UpdateCheckService>());
         return services;
     }
 }

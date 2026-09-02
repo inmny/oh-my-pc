@@ -13,6 +13,7 @@ using OhMyPc.Infrastructure;
 using OhMyPc.Infrastructure.LocalApi;
 using OhMyPc.Infrastructure.Logging;
 using OhMyPc.Infrastructure.Persistence;
+using Velopack;
 
 namespace OhMyPc.App;
 
@@ -30,6 +31,8 @@ public partial class App : System.Windows.Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        // Velopack 更新钩子必须最先执行：处理更新后首次启动、安装/卸载等生命周期事件
+        VelopackApp.Build().Run();
         DispatcherUnhandledException += (_, args) =>
             _host?.Services.GetService<ILogger<App>>()?.LogCritical(args.Exception, "界面操作失败");
         ShutdownMode = ShutdownMode.OnExplicitShutdown;

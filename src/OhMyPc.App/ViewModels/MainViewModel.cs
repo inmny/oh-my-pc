@@ -13,6 +13,7 @@ using OhMyPc.Infrastructure.InputStatus;
 using OhMyPc.Infrastructure.LocalApi;
 using OhMyPc.Infrastructure.LocalUsage;
 using OhMyPc.Infrastructure.Providers;
+using OhMyPc.Infrastructure.Updates;
 using SkiaSharp;
 
 namespace OhMyPc.App.ViewModels;
@@ -28,6 +29,7 @@ public sealed class MainViewModel : ViewModelBase
     private readonly EnvironmentSourceImporter _importer;
     private readonly LocalNotificationApiService _localApi;
     private readonly StartupRegistrationService _startup;
+    private readonly UpdateCheckService _updates;
     private readonly LocalizationService _text;
     private readonly ILogger<MainViewModel> _logger;
     private bool _isBusy;
@@ -54,6 +56,8 @@ public sealed class MainViewModel : ViewModelBase
     private string? _localizedChartLanguage;
     private string _contributionRangeText = "";
     private string _localApiStatusText = "";
+    private string _updateBannerText = "";
+    private bool _updateBusy;
     private UsageBreakdownGroup _breakdownGroup = UsageBreakdownGroup.Tool;
     private UsageBreakdownPeriod _breakdownPeriod = UsageBreakdownPeriod.Today;
 
@@ -68,6 +72,7 @@ public sealed class MainViewModel : ViewModelBase
         ProxyViewModel proxy,
         LocalNotificationApiService localApi,
         StartupRegistrationService startup,
+        UpdateCheckService updates,
         LocalizationService text,
         ILogger<MainViewModel> logger)
     {
@@ -86,6 +91,11 @@ public sealed class MainViewModel : ViewModelBase
         _logger = logger;
         _statusText = text["Status_Starting"];
         _lastUpdated = text["Status_NotUpdated"];
+        _updates = updates;
+        _updates.UpdateAvailable += (_, info) => InvokeOnUi(
+            () => UpdateBannerText = _text.Format("Update_BannerFound", info.TargetVersion));
+        _updates.DownloadProgress += (_, progress) => InvokeOnUi(
+            () => UpdateBannerText = _text.Format("Update_BannerDownloading", progress));
         _weeklyUsageSeries = new CandlesticksSeries<FinancialPointI>
         {
             Values = _weeklyUsageValues,
@@ -112,9 +122,13 @@ public sealed class MainViewModel : ViewModelBase
         _quotas.Refreshed += BackgroundQuotaRefreshCompleted;
         _inputStatus.Refreshed += BackgroundInputStatusRefreshCompleted;
         RefreshCommand = new AsyncCommand(RefreshAllAsync, () => !IsBusy);
+        UpdateNowCommand = new AsyncCommand(UpdateNowAsync, () => !UpdateBusy);
         SelectBreakdownGroupCommand = new AsyncCommand<UsageBreakdownGroup>(SelectBreakdownGroupAsync);
         SelectBreakdownPeriodCommand = new AsyncCommand<UsageBreakdownPeriod>(SelectBreakdownPeriodAsync);
     }
+
+    private static void InvokeOnUi(Action action) =>
+        System.Windows.Application.Current?.Dispatcher?.BeginInvoke(action);
 
     public ObservableCollection<QuotaRowViewModel> QuotaRows { get; } = [];
     public ObservableCollection<QuotaCardItemViewModel> QuotaCards { get; } = [];
@@ -127,8 +141,51 @@ public sealed class MainViewModel : ViewModelBase
     public ProxyViewModel Proxy { get; }
 
     public ICommand RefreshCommand { get; }
+    public ICommand UpdateNowCommand { get; }
     public ICommand SelectBreakdownGroupCommand { get; }
     public ICommand SelectBreakdownPeriodCommand { get; }
+
+    /// <summary>顶部更新横幅文案：空串表示无更新；下载中显示进度，失败显示原因。</summary>
+    public string UpdateBannerText
+    {
+        get => _updateBannerText;
+        private set
+        {
+            if (Set(ref _updateBannerText, value)) Raise(nameof(HasUpdateBanner));
+        }
+    }
+
+    public bool HasUpdateBanner => UpdateBannerText.Length > 0;
+
+    public bool UpdateBusy
+    {
+        get => _updateBusy;
+        private set
+        {
+            if (Set(ref _updateBusy, value)) ((AsyncCommand)UpdateNowCommand).Refresh();
+        }
+    }
+
+    public string AppVersionText { get; } = $"v{typeof(MainViewModel).Assembly.GetName().Version}";
+
+    private async Task UpdateNowAsync()
+    {
+        if (_updateBusy) return;
+        UpdateBusy = true;
+        try
+        {
+            await _updates.DownloadAndApplyAsync();
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "应用更新失败");
+            UpdateBannerText = _text.Format("Update_BannerFailed", exception.Message);
+        }
+        finally
+        {
+            UpdateBusy = false;
+        }
+    }
     public bool IsBusy { get => _isBusy; private set { if (Set(ref _isBusy, value)) ((AsyncCommand)RefreshCommand).Refresh(); } }
     public bool CanEditSettings { get => _canEditSettings; private set => Set(ref _canEditSettings, value); }
     public string StatusText { get => _statusText; private set => Set(ref _statusText, value); }
@@ -327,6 +384,7 @@ public sealed class MainViewModel : ViewModelBase
         LocalApiPort = settings.LocalApiPort,
         NotificationHistoryRetentionDays = settings.NotificationHistoryRetentionDays,
         CliProxyAutoStart = settings.CliProxyAutoStart,
+        UpdateCheckEnabled = settings.UpdateCheckEnabled,
         ClientSyncScopes = settings.ClientSyncScopes.ToDictionary(
             pair => pair.Key,
             pair => CloneScope(pair.Value))

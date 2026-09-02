@@ -1535,7 +1535,12 @@
                                     </ComboBox>
                                     <CheckBox Content="{DynamicResource Settings_StartWithWindows}" IsChecked="{Binding Settings.StartWithWindows}" Margin="0,0,0,12" />
                                     <CheckBox Content="{DynamicResource Settings_CliProxyAutoStart}" IsChecked="{Binding Settings.CliProxyAutoStart}" Margin="0,0,0,12" />
+                                    <CheckBox Content="{DynamicResource Settings_UpdateCheck}" IsChecked="{Binding Settings.UpdateCheckEnabled}" Margin="0,0,0,12" />
                                     <CheckBox Content="{DynamicResource Settings_EnableNotifications}" IsChecked="{Binding Settings.NotificationsEnabled}" />
+                                    <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                                        <TextBlock Text="{DynamicResource Settings_Version}" Style="{StaticResource MutedText}" />
+                                        <TextBlock Text="{Binding AppVersionText}" Style="{StaticResource MutedText}" Margin="8,0,0,0" />
+                                    </StackPanel>
                                     <TextBlock Text="{DynamicResource Settings_NotificationRetention}" Margin="0,16,0,6" />
                                     <ComboBox SelectedValue="{Binding Settings.NotificationHistoryRetentionDays, Mode=TwoWay}"
                                               SelectedValuePath="Tag"
@@ -1645,6 +1650,27 @@
 
         <Border Grid.Column="1" Height="3" VerticalAlignment="Top" Background="{StaticResource AccentBrush}" Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
             <ProgressBar IsIndeterminate="True" Height="3" />
+        </Border>
+
+        <!-- 更新横幅：发现新版本时悬浮在内容区顶部 -->
+        <Border Grid.Column="1"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Margin="12,10,0,0"
+                Padding="14,8"
+                CornerRadius="6"
+                Background="{StaticResource AccentBrush}"
+                Visibility="{Binding HasUpdateBanner, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding UpdateBannerText}" Foreground="#14261C" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <Button Content="{DynamicResource Update_InstallNow}"
+                        Command="{Binding UpdateNowCommand}"
+                        Margin="14,0,0,0"
+                        Padding="10,4"
+                        Background="#14261C"
+                        Foreground="{StaticResource AccentBrush}"
+                        BorderThickness="0" />
+            </StackPanel>
         </Border>
     </Grid>
 </Window>

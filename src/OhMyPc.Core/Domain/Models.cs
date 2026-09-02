@@ -317,6 +317,8 @@ public sealed class AppSettings
     public int LocalApiPort { get; set; } = 39417;
     public int NotificationHistoryRetentionDays { get; set; } = NotificationRetentionPolicy.DefaultDays;
     public bool CliProxyAutoStart { get; set; } = true;
+    /// <summary>每小时检查一次 GitHub Release 更新；仅安装版生效。</summary>
+    public bool UpdateCheckEnabled { get; set; } = true;
     /// <summary>键为 ProxyClientKind 名称；记录各客户端上次同步使用的上游范围，缺失时视为全部上游。</summary>
     public Dictionary<string, ProxyClientSyncScope> ClientSyncScopes { get; set; } = [];
 }

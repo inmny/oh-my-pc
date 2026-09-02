@@ -1,0 +1,87 @@
+name: release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 读取版本号
+        id: version
+        shell: pwsh
+        run: |
+          $csproj = Get-Content src/OhMyPc.App/OhMyPc.App.csproj -Raw
+          if ($csproj -notmatch '<Version>([^<]+)</Version>') { throw 'csproj 中未找到 <Version>' }
+          "version=$($Matches[1])" >> $env:GITHUB_OUTPUT
+          Write-Host "版本号：$($Matches[1])"
+
+      - name: 判断版本号是否变化
+        id: shouldRelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $latest = gh release view --repo "${{ github.repository }}" --json tagName --jq .tagName 2>$null
+          if ($LASTEXITCODE -ne 0) { $latest = '' }
+          if ("v${{ steps.version.outputs.version }}" -eq "$latest") {
+            "skip=true" >> $env:GITHUB_OUTPUT
+            Write-Host "版本未变化（$latest），跳过发布"
+          } else {
+            "skip=false" >> $env:GITHUB_OUTPUT
+            Write-Host "版本变化：$latest -> v${{ steps.version.outputs.version }}，开始发布"
+          }
+
+      - name: 安装 .NET SDK
+        if: steps.shouldRelease.outputs.skip != 'true'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: 打包便携版
+        if: steps.shouldRelease.outputs.skip != 'true'
+        shell: pwsh
+        run: ./eng/package-portable.ps1
+
+      - name: 安装 Velopack CLI
+        if: steps.shouldRelease.outputs.skip != 'true'
+        run: dotnet tool install -g vpk
+
+      - name: 生成 Velopack 更新包
+        if: steps.shouldRelease.outputs.skip != 'true'
+        shell: pwsh
+        run: |
+          $vpk = Join-Path $env:USERPROFILE '.dotnet\tools\vpk.exe'
+          & $vpk pack `
+            --packId OhMyPc `
+            --packVersion ${{ steps.version.outputs.version }} `
+            --packDir artifacts/portable/OhMyPc-win-x64 `
+            --mainExe OhMyPc.App.exe `
+            --packTitle 'oh-my-pc' `
+            --outputDir artifacts/velopack
+          if ($LASTEXITCODE -ne 0) { throw 'vpk pack 失败' }
+          Get-ChildItem artifacts/velopack | ForEach-Object { Write-Host "产物：$($_.Name)" }
+
+      - name: 创建 Release
+        if: steps.shouldRelease.outputs.skip != 'true'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "v${{ steps.version.outputs.version }}"
+          gh release create $tag `
+            --repo "${{ github.repository }}" `
+            --title "oh-my-pc $tag" `
+            --notes "版本 ${{ steps.version.outputs.version }}。
+
+          - 手动安装：下载 Setup.exe（推荐，自动建快捷方式）或便携版 zip 解压即用。
+          - 已安装用户无需下载：应用每小时自动检查，收到通知后在主窗口点「立即更新」即可。" `
+            artifacts/velopack/* artifacts/portable/OhMyPc-win-x64-portable.zip

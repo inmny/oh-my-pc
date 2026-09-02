@@ -9,6 +9,8 @@
     <OutputType>WinExe</OutputType>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Resources\AppIcon.ico</ApplicationIcon>
+    <!-- 版本号唯一来源：改这里并推送 main 即触发 GitHub Actions 发版 -->
+    <Version>0.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
