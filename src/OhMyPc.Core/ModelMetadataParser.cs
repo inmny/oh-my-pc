@@ -39,16 +39,30 @@ public static class ModelMetadataParser
         return exact;
     }
 
-    /// <summary>同名 id 多 provider 重复时，费率非空字段更多者胜出（含缓存价的完整费率表优先）；字段数相同保留既有条目。</summary>
+    /// <summary>
+    /// 同名 id 多 provider 重复时择优：先比正费率字段数（订阅套餐的全 0 费率不算有效信息，
+    /// 官方牌价优先于它）；正数字段数相同再比费率字段数（含缓存价的完整费率表优先）；
+    /// 仍相同则保留既有条目。
+    /// </summary>
     private static void Merge(Dictionary<string, ModelMetadata> target, string id, ModelMetadata metadata)
     {
-        if (target.TryGetValue(id, out var existing) && CostFieldCount(existing.Cost) >= CostFieldCount(metadata.Cost)) return;
+        if (target.TryGetValue(id, out var existing))
+        {
+            var existingPositive = PositiveFieldCount(existing.Cost);
+            var candidatePositive = PositiveFieldCount(metadata.Cost);
+            if (existingPositive > candidatePositive) return;
+            if (existingPositive == candidatePositive && CostFieldCount(existing.Cost) >= CostFieldCount(metadata.Cost)) return;
+        }
         target[id] = metadata;
     }
 
     private static int CostFieldCount(ProxyModelCost cost) =>
         (cost.Input is null ? 0 : 1) + (cost.Output is null ? 0 : 1)
         + (cost.CacheRead is null ? 0 : 1) + (cost.CacheWrite is null ? 0 : 1);
+
+    private static int PositiveFieldCount(ProxyModelCost cost) =>
+        (cost.Input > 0 ? 1 : 0) + (cost.Output > 0 ? 1 : 0)
+        + (cost.CacheRead > 0 ? 1 : 0) + (cost.CacheWrite > 0 ? 1 : 0);
 
     /// <summary>思考档位与推理变体的常见尾部后缀（如 claude-opus-4-6-thinking、gemini-3.1-pro-high）。</summary>
     private static readonly HashSet<string> VariantSuffixes =
@@ -68,9 +82,26 @@ public static class ModelMetadataParser
         }
     }
 
+    /// <summary>
+    /// 模型名归一：别名反查 → 目录精确 → 目录剥后缀 → 原样返回。
+    /// 用量统计把各客户端上报的别名/变体名统一到目录标准名，费率与分组因此共享同一条目。
+    /// </summary>
+    public static string Canonicalize(
+        IReadOnlyDictionary<string, ModelMetadata> catalog,
+        string id,
+        IReadOnlyDictionary<string, string>? aliasToName = null)
+    {
+        if (aliasToName is not null && aliasToName.TryGetValue(id, out var realName))
+        {
+            id = realName;
+        }
+        return Find(catalog, id) is { } metadata ? metadata.Id : id;
+    }
+
     private static ModelMetadata ParseModel(string id, JsonNode node) => new()
     {
         Id = id,
+        DisplayName = (string?)node["name"],
         ContextWindow = ToInt64(node["limit"]?["context"]),
         InputModalities = FilterModalities(node["modalities"]?["input"] as JsonArray),
         OutputModalities = FilterModalities(node["modalities"]?["output"] as JsonArray),

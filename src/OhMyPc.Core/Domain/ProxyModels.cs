@@ -95,6 +95,9 @@ public sealed class ProxyConfigSnapshot
     public List<ProxyProviderConfig> Providers { get; set; } = [];
     public ProxyRoutingConfig Routing { get; set; } = new();
     public ProxyAccessConfig Access { get; set; } = new();
+    /// <summary>模型别名 → 上游真实名（用量统计名称归一用）。</summary>
+    public IReadOnlyDictionary<string, string> AliasToName { get; set; } =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 }
 
 public sealed class ProxyServiceStatus
@@ -109,6 +112,8 @@ public sealed class ProxyServiceStatus
 public sealed class ModelMetadata
 {
     public string Id { get; init; } = "";
+    /// <summary>目录展示名（如 "Claude Opus 4.6"）；目录未提供时为 null。</summary>
+    public string? DisplayName { get; init; }
     public long? ContextWindow { get; init; }
     public IReadOnlyList<string> InputModalities { get; init; } = [];
     public IReadOnlyList<string> OutputModalities { get; init; } = [];

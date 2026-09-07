@@ -5,8 +5,6 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using OhMyPc.Core;
 using OhMyPc.Core.Domain;
-using YamlDotNet.Serialization;
-using YamlDotNet.Serialization.NamingConventions;
 using ZstdSharp;
 
 namespace OhMyPc.Infrastructure.LocalUsage;
@@ -15,30 +13,28 @@ public sealed class DshUsageCollector : ILocalUsageCollector
 {
     private const uint ZstdMagic = 0xFD2FB528;
     private const int StableReadAttempts = 3;
-    private static readonly IReadOnlyDictionary<(string Provider, string Model), ModelCost> EmptyModelCosts =
-        new Dictionary<(string Provider, string Model), ModelCost>();
     private readonly string _sessionsRoot;
-    private readonly string _settingsPath;
+    private readonly IModelMetadataProvider _metadataProvider;
     private readonly ILogger<DshUsageCollector> _logger;
     private readonly SemaphoreSlim _cacheGate = new(1, 1);
     private readonly Dictionary<string, CachedSession> _sessionCache = new(StringComparer.OrdinalIgnoreCase);
-    private FileStamp? _modelCostsStamp;
-    private IReadOnlyDictionary<(string Provider, string Model), ModelCost> _cachedModelCosts = EmptyModelCosts;
+    private IReadOnlyDictionary<string, ModelMetadata>? _cachedCatalog;
 
     public DshUsageCollector(
         LocalToolDetector detector,
+        IModelMetadataProvider metadataProvider,
         ILogger<DshUsageCollector> logger)
-        : this(detector.DshSessionsRoot, detector.DshSettingsPath, logger)
+        : this(detector.DshSessionsRoot, metadataProvider, logger)
     {
     }
 
     internal DshUsageCollector(
         string sessionsRoot,
-        string settingsPath,
+        IModelMetadataProvider metadataProvider,
         ILogger<DshUsageCollector> logger)
     {
         _sessionsRoot = sessionsRoot;
-        _settingsPath = settingsPath;
+        _metadataProvider = metadataProvider;
         _logger = logger;
     }
 
@@ -67,12 +63,20 @@ public sealed class DshUsageCollector : ILocalUsageCollector
         var today = DateOnly.FromDateTime(DateTime.Now);
         var observedAt = DateTimeOffset.UtcNow;
         var deviceId = LocalUsageDevice.Id();
-        var settingsStamp = GetFileStamp(_settingsPath);
-        if (_modelCostsStamp != settingsStamp)
+        if (_cachedCatalog is null || _cachedCatalog.Count == 0)
         {
-            _cachedModelCosts = await ReadModelCostsAsync(cancellationToken).ConfigureAwait(false);
-            _modelCostsStamp = settingsStamp;
-            _sessionCache.Clear();
+            try
+            {
+                _cachedCatalog = await _metadataProvider.GetAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+            {
+                _logger.LogWarning(exception, "无法获取 models.dev 牌价，DSH 用量暂不折算成本");
+            }
         }
 
         var paths = Directory
@@ -103,14 +107,13 @@ public sealed class DshUsageCollector : ILocalUsageCollector
             {
                 var (compressed, stableStamp) = await ReadStableSessionAsync(path, cancellationToken).ConfigureAwait(false);
                 bytesRead += compressed.LongLength;
-                var observations = ParseSession(
-                    compressed,
-                    fullHistory: true,
-                    today,
-                    deviceId,
-                    observedAt,
-                    _cachedModelCosts);
-                _sessionCache[path] = new CachedSession(stableStamp, observations);
+                var observations = ParseSession(compressed, fullHistory: true, today, deviceId, observedAt);
+                if (_cachedCatalog is { Count: > 0 })
+                {
+                    // 目录未就绪（缺失或为空）时费用按 0 记且不入缓存：目录就绪后的下一轮会重新解析计价
+                    ApplyCatalogCosts(observations, _cachedCatalog);
+                    _sessionCache[path] = new CachedSession(stableStamp, observations);
+                }
                 parsedFiles++;
                 MergeSession(aggregate, observations, fullHistory, today, observedAt);
             }
@@ -162,15 +165,7 @@ public sealed class DshUsageCollector : ILocalUsageCollector
         bool fullHistory,
         DateOnly today,
         string deviceId,
-        DateTimeOffset observedAt) => ParseSession(compressed, fullHistory, today, deviceId, observedAt, EmptyModelCosts);
-
-    private static IReadOnlyList<UsageObservation> ParseSession(
-        ReadOnlySpan<byte> compressed,
-        bool fullHistory,
-        DateOnly today,
-        string deviceId,
-        DateTimeOffset observedAt,
-        IReadOnlyDictionary<(string Provider, string Model), ModelCost> modelCosts)
+        DateTimeOffset observedAt)
     {
         var frames = ScanFrames(compressed);
         if (frames.Count == 0) throw new InvalidDataException("DSH 会话不包含完整的 Zstandard 帧");
@@ -259,10 +254,6 @@ public sealed class DshUsageCollector : ILocalUsageCollector
                 target.CacheWriteTokens += cacheWriteTokens;
                 target.ReasoningTokens += Integer(usage, "reasoningTokens");
                 target.MessageCount += 1;
-                if (modelCosts.TryGetValue((provider, model), out var modelCost))
-                {
-                    target.CostUsd += CalculateCost(modelCost, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens);
-                }
             }
         }
 
@@ -415,54 +406,22 @@ public sealed class DshUsageCollector : ILocalUsageCollector
             : null;
     }
 
-    private async Task<IReadOnlyDictionary<(string Provider, string Model), ModelCost>> ReadModelCostsAsync(
-        CancellationToken cancellationToken)
+    /// <summary>费用统一按 models.dev 牌价折算（每百万 token 美元）；模型名先归一到目录标准 id，未命中不计费。</summary>
+    private static void ApplyCatalogCosts(
+        IReadOnlyList<UsageObservation> observations,
+        IReadOnlyDictionary<string, ModelMetadata>? catalog)
     {
-        var modelCosts = new Dictionary<(string Provider, string Model), ModelCost>();
-        if (!File.Exists(_settingsPath)) return modelCosts;
-
-        var yaml = await File.ReadAllTextAsync(_settingsPath, cancellationToken);
-        var settings = new DeserializerBuilder()
-            .WithNamingConvention(CamelCaseNamingConvention.Instance)
-            .IgnoreUnmatchedProperties()
-            .Build()
-            .Deserialize<SettingsDocument>(yaml);
-        if (settings.LlmPiAi is null) return modelCosts;
-
-        foreach (var (provider, profile) in settings.LlmPiAi.Providers)
+        if (catalog is null) return;
+        foreach (var observation in observations)
         {
-            foreach (var model in profile.Models)
-            {
-                if (model.Cost is not null) modelCosts[(provider, model.Id)] = model.Cost;
-            }
+            if (ModelMetadataParser.Find(catalog, observation.Model) is not { Cost.IsEmpty: false } metadata) continue;
+            var rate = metadata.Cost;
+            observation.CostUsd = ((rate.Input ?? 0m) * observation.InputTokens
+                + (rate.Output ?? 0m) * observation.OutputTokens
+                + (rate.CacheRead ?? 0m) * observation.CacheReadTokens
+                + (rate.CacheWrite ?? 0m) * observation.CacheWriteTokens)
+                / 1_000_000m;
         }
-        return modelCosts;
-    }
-
-    private static decimal CalculateCost(
-        ModelCost modelCost,
-        long inputTokens,
-        long outputTokens,
-        long cacheReadTokens,
-        long cacheWriteTokens)
-    {
-        var rates = new CostRates(modelCost.Input, modelCost.Output, modelCost.CacheRead, modelCost.CacheWrite);
-        var billedInputTokens = inputTokens + cacheReadTokens + cacheWriteTokens;
-        long matchedThreshold = -1;
-        foreach (var tier in modelCost.Tiers)
-        {
-            if (billedInputTokens > tier.InputTokensAbove && tier.InputTokensAbove > matchedThreshold)
-            {
-                rates = new CostRates(tier.Input, tier.Output, tier.CacheRead, tier.CacheWrite);
-                matchedThreshold = tier.InputTokensAbove;
-            }
-        }
-
-        return (rates.Input * inputTokens
-                + rates.Output * outputTokens
-                + rates.CacheRead * cacheReadTokens
-                + rates.CacheWrite * cacheWriteTokens)
-            / 1_000_000m;
     }
 
     private static string? Text(JsonElement value, string property)
@@ -477,47 +436,6 @@ public sealed class DshUsageCollector : ILocalUsageCollector
         return item.GetInt64();
     }
 
-    private sealed class SettingsDocument
-    {
-        [YamlMember(Alias = "llm-pi-ai", ApplyNamingConventions = false)]
-        public PiAiSettings? LlmPiAi { get; set; }
-    }
-
-    private sealed class PiAiSettings
-    {
-        public Dictionary<string, ProviderProfile> Providers { get; set; } = [];
-    }
-
-    private sealed class ProviderProfile
-    {
-        public List<ModelProfile> Models { get; set; } = [];
-    }
-
-    private sealed class ModelProfile
-    {
-        public string Id { get; set; } = "";
-        public ModelCost? Cost { get; set; }
-    }
-
-    private sealed class ModelCost
-    {
-        public decimal Input { get; set; }
-        public decimal Output { get; set; }
-        public decimal CacheRead { get; set; }
-        public decimal CacheWrite { get; set; }
-        public List<CostTier> Tiers { get; set; } = [];
-    }
-
-    private sealed class CostTier
-    {
-        public long InputTokensAbove { get; set; }
-        public decimal Input { get; set; }
-        public decimal Output { get; set; }
-        public decimal CacheRead { get; set; }
-        public decimal CacheWrite { get; set; }
-    }
-
     private sealed record CachedSession(FileStamp Stamp, IReadOnlyList<UsageObservation>? Observations);
     private readonly record struct FileStamp(long Length, long LastWriteTimeUtcTicks, long CreationTimeUtcTicks);
-    private readonly record struct CostRates(decimal Input, decimal Output, decimal CacheRead, decimal CacheWrite);
 }

@@ -100,6 +100,29 @@ public sealed class ModelMetadataParserTests
     }
 
     [Fact]
+    public void Parse_MergesDuplicatesPreferringPositiveRatesOverZeroPricedPlans()
+    {
+        var json = """
+        {
+          "official": {
+            "models": { "dupe-model": { "cost": { "input": 0.14, "output": 0.28, "cache_read": 0.0028 } } }
+          },
+          "coding-plan": {
+            "models": { "dupe-model": { "cost": { "input": 0, "output": 0, "cache_read": 0, "cache_write": 0 } } }
+          }
+        }
+        """;
+
+        var lookup = ModelMetadataParser.Parse(json);
+
+        // 订阅套餐的全 0 费率与官方条目字段数相同，但有效信息更少，不得覆盖官方牌价
+        var model = lookup["dupe-model"];
+        Assert.Equal(0.14m, model.Cost.Input);
+        Assert.Equal(0.28m, model.Cost.Output);
+        Assert.Equal(0.0028m, model.Cost.CacheRead);
+    }
+
+    [Fact]
     public void Parse_ToleratesEntriesWithoutMetadata()
     {
         var lookup = ModelMetadataParser.Parse(SampleJson);

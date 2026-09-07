@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
 using OhMyPc.Core;
@@ -13,13 +12,11 @@ namespace OhMyPc.Infrastructure.LocalUsage;
 /// 读取 zcode 用量数据库（~/.zcode/cli/db/db.sqlite 的 model_usage 表）统计用量；
 /// zcode 应用自身展示的累计用量即来自此表（rollout 目录的 model-io 日志只覆盖个别会话，不能作数据源）。
 /// 数据库为 WAL 模式且被 zcode 持有：先复制 db 与 wal 到临时文件再查询，避免与写入方冲突。
-/// 计费优先级：走 CLIProxyAPI 网关的 provider（从 zcode config.json 识别）用 CPA 配置费率；
-/// 其余（builtin:*、offpeak-idle-plan 等订阅 provider）按 models.dev 牌价折算等值成本。
+/// 计费统一按 models.dev 牌价折算等值成本；别名（如 GPT-5.6-Sol）经 CPA 配置的别名表归一到真实名再查目录。
 /// </summary>
 public sealed class ZcodeUsageCollector : ILocalUsageCollector
 {
     private readonly string _dbPath;
-    private readonly IReadOnlyList<string> _zcodeConfigPaths;
     private readonly IProxyConfigStore _proxyStore;
     private readonly IModelMetadataProvider _metadataProvider;
     private readonly ILogger<ZcodeUsageCollector> _logger;
@@ -32,24 +29,17 @@ public sealed class ZcodeUsageCollector : ILocalUsageCollector
         IProxyConfigStore proxyStore,
         IModelMetadataProvider metadataProvider,
         ILogger<ZcodeUsageCollector> logger)
-        : this(
-            detector.ZcodeDatabasePath,
-            [ProxyClientPaths.ZcodeDesktopConfig, ProxyClientPaths.ZcodeCliConfig],
-            proxyStore,
-            metadataProvider,
-            logger)
+        : this(detector.ZcodeDatabasePath, proxyStore, metadataProvider, logger)
     {
     }
 
     internal ZcodeUsageCollector(
         string dbPath,
-        IReadOnlyList<string> zcodeConfigPaths,
         IProxyConfigStore proxyStore,
         IModelMetadataProvider metadataProvider,
         ILogger<ZcodeUsageCollector> logger)
     {
         _dbPath = dbPath;
-        _zcodeConfigPaths = zcodeConfigPaths;
         _proxyStore = proxyStore;
         _metadataProvider = metadataProvider;
         _logger = logger;
@@ -116,7 +106,7 @@ public sealed class ZcodeUsageCollector : ILocalUsageCollector
             }
         }
 
-        var costs = await ReadCostTableAsync(cancellationToken).ConfigureAwait(false);
+        var costs = await ReadCatalogTableAsync(cancellationToken).ConfigureAwait(false);
         ApplyCosts(observations, costs);
 
         stopwatch.Stop();
@@ -207,26 +197,17 @@ public sealed class ZcodeUsageCollector : ILocalUsageCollector
         reader.IsDBNull(ordinal) ? 0 : reader.GetInt64(ordinal);
 
     /// <summary>
-    /// 费率在聚合之后统一套用，费率更新无需重新读库。
-    /// 网关 provider 用 CPA 配置费率（中转站真实扣费口径）；
-    /// 其余 provider（订阅制）按 models.dev 牌价折算等值成本。
+    /// 费率统一按 models.dev 牌价折算（每百万 token 美元）：别名/变体名先归一到目录标准 id 再查价，
+    /// 未命中目录的模型不计费。
     /// </summary>
-    private static void ApplyCosts(IReadOnlyList<UsageObservation> observations, CostTable costs)
+    private static void ApplyCosts(IReadOnlyList<UsageObservation> observations, CatalogTable costs)
     {
+        if (costs.Catalog is null) return;
         foreach (var observation in observations)
         {
-            ProxyModelCost? rate = null;
-            if (costs.GatewayProviderIds.Contains(observation.Provider))
-            {
-                costs.GatewayRates.TryGetValue(observation.Model, out rate);
-            }
-            // 订阅 provider 按 models.dev 牌价折算；-thinking/-high 等变体后缀剥离后按基型号匹配
-            if (rate is null && costs.Catalog is { } catalog
-                && ModelMetadataParser.Find(catalog, observation.Model) is { Cost.IsEmpty: false } found)
-            {
-                rate = found.Cost;
-            }
-            if (rate is null) continue;
+            if (ModelMetadataParser.Find(costs.Catalog, ModelMetadataParser.Canonicalize(costs.Catalog, observation.Model, costs.AliasToName))
+                is not { Cost.IsEmpty: false } metadata) continue;
+            var rate = metadata.Cost;
             observation.CostUsd = ((rate.Input ?? 0m) * observation.InputTokens
                 + (rate.Output ?? 0m) * observation.OutputTokens
                 + (rate.CacheRead ?? 0m) * observation.CacheReadTokens
@@ -235,29 +216,20 @@ public sealed class ZcodeUsageCollector : ILocalUsageCollector
         }
     }
 
-    private async Task<CostTable> ReadCostTableAsync(CancellationToken cancellationToken)
+    /// <summary>费率与名称归一唯一来源是 models.dev 目录：别名表（CPA 配置）把别名折算成真实名后查目录。</summary>
+    private async Task<CatalogTable> ReadCatalogTableAsync(CancellationToken cancellationToken)
     {
-        ProxyConfigSnapshot snapshot;
+        IReadOnlyDictionary<string, string> aliasToName = new Dictionary<string, string>();
         try
         {
-            snapshot = await _proxyStore.LoadAsync(cancellationToken).ConfigureAwait(false);
+            aliasToName = (await _proxyStore.LoadAsync(cancellationToken).ConfigureAwait(false)).AliasToName;
         }
         catch (Exception exception) when (exception is FileNotFoundException or IOException or UnauthorizedAccessException or YamlException)
         {
-            // CLIProxyAPI 未安装或配置暂不可读：网关费率留空，订阅用量仍可按牌价折算
-            return new CostTable([], [], await ReadCatalogAsync(cancellationToken).ConfigureAwait(false));
+            // CLIProxyAPI 未安装或配置暂不可读：无别名可归一，直接按上报名查目录
         }
-
-        var rates = new Dictionary<string, ProxyModelCost>(StringComparer.OrdinalIgnoreCase);
-        foreach (var model in snapshot.Providers.SelectMany(provider => provider.Models))
-        {
-            if (model.Cost is null || model.Cost.IsEmpty) continue;
-            rates.TryAdd(model.GetId(), model.Cost);
-        }
-        var gatewayRoot = snapshot.Access.GetBaseUrl().TrimEnd('/');
-        var gatewayIds = await ReadGatewayProviderIdsAsync(gatewayRoot, cancellationToken).ConfigureAwait(false);
         var catalog = await ReadCatalogAsync(cancellationToken).ConfigureAwait(false);
-        return new CostTable(gatewayIds, rates, catalog);
+        return new CatalogTable(aliasToName, catalog);
     }
 
     private async Task<IReadOnlyDictionary<string, ModelMetadata>?> ReadCatalogAsync(CancellationToken cancellationToken)
@@ -272,39 +244,9 @@ public sealed class ZcodeUsageCollector : ILocalUsageCollector
         }
         catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
         {
-            _logger.LogWarning(exception, "无法获取 models.dev 牌价，订阅 provider 用量暂不折算成本");
+            _logger.LogWarning(exception, "无法获取 models.dev 牌价，zcode 用量暂不折算成本");
             return null;
         }
-    }
-
-    /// <summary>从 zcode 配置里找出 baseURL 指向本网关的 provider id（含根地址与带 /v1 的写法）。</summary>
-    private async Task<HashSet<string>> ReadGatewayProviderIdsAsync(
-        string gatewayRoot,
-        CancellationToken cancellationToken)
-    {
-        var ids = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var path in _zcodeConfigPaths)
-        {
-            if (!File.Exists(path)) continue;
-            try
-            {
-                using var document = JsonDocument.Parse(await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false));
-                if (document.RootElement.ValueKind != JsonValueKind.Object
-                    || !document.RootElement.TryGetProperty("provider", out var providers)
-                    || providers.ValueKind != JsonValueKind.Object) continue;
-                foreach (var provider in providers.EnumerateObject())
-                {
-                    if (!provider.Value.TryGetProperty("options", out var options)
-                        || Text(options, "baseURL") is not { } baseUrl) continue;
-                    if (baseUrl.TrimEnd('/').StartsWith(gatewayRoot, StringComparison.OrdinalIgnoreCase)) ids.Add(provider.Name);
-                }
-            }
-            catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException)
-            {
-                _logger.LogWarning(exception, "无法读取 zcode 配置 {Path}，跳过网关计费识别", path);
-            }
-        }
-        return ids;
     }
 
     private DatabaseStamp? GetDatabaseStamp()
@@ -333,15 +275,8 @@ public sealed class ZcodeUsageCollector : ILocalUsageCollector
         }
     }
 
-    private static string? Text(JsonElement value, string property)
-    {
-        if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty(property, out var item)) return null;
-        return item.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(item.GetString()) ? item.GetString() : null;
-    }
-
-    private sealed record CostTable(
-        HashSet<string> GatewayProviderIds,
-        Dictionary<string, ProxyModelCost> GatewayRates,
+    private sealed record CatalogTable(
+        IReadOnlyDictionary<string, string> AliasToName,
         IReadOnlyDictionary<string, ModelMetadata>? Catalog);
 
     private readonly record struct DatabaseStamp(FileStamp Database, FileStamp? Wal);

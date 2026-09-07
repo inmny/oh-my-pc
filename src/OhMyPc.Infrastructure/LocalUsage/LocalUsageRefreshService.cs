@@ -14,11 +14,18 @@ public sealed class LocalUsageRefreshedEventArgs(bool fullHistory) : EventArgs
 public sealed class LocalUsageRefreshService(
     ILocalUsageCollector collector,
     IAppStore store,
+    IProxyConfigStore proxyStore,
+    IModelMetadataProvider metadataProvider,
     IAutomationEventPublisher eventPublisher,
     ITextLocalizer text,
     ILogger<LocalUsageRefreshService> logger)
 {
+    private const string DefaultProviderId = "unknown";
+    private const string DefaultModelId = "unknown";
+    private const string ActivityClient = "_activity";
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private IReadOnlyDictionary<string, string>? _aliasToName;
+    private IReadOnlyDictionary<string, ModelMetadata>? _catalog;
     private IReadOnlyList<UsageSnapshot>? _lastFullSnapshot;
     private IReadOnlyList<UsageSnapshot>? _lastTodaySnapshot;
     private DateOnly? _lastFullSnapshotDate;
@@ -35,10 +42,12 @@ public sealed class LocalUsageRefreshService(
                 () => collector.CollectAsync(fullHistory, cancellationToken),
                 cancellationToken).ConfigureAwait(false);
             var collectionElapsedMs = stopwatch.ElapsedMilliseconds;
+            if (_catalog is null || _aliasToName is null) await LoadNamingAsync(cancellationToken).ConfigureAwait(false);
             var todayDate = DateOnly.FromDateTime(DateTime.Now);
-            var observations = fullHistory
+            // 模型名在入库前统一到目录标准 id：别名与变体名共用同一行，费率与分组按同一口径
+            var observations = CanonicalizeModels(fullHistory
                 ? collectedObservations
-                : PreserveFullHistoryActivity(collectedObservations, todayDate);
+                : PreserveFullHistoryActivity(collectedObservations, todayDate));
             var snapshot = CreateSnapshot(observations);
             var previousSnapshot = fullHistory ? _lastFullSnapshot : _lastTodaySnapshot;
             var previousDate = fullHistory ? _lastFullSnapshotDate : _lastTodaySnapshotDate;
@@ -83,6 +92,72 @@ public sealed class LocalUsageRefreshService(
         {
             _gate.Release();
         }
+    }
+
+    private async Task LoadNamingAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            _aliasToName = (await proxyStore.LoadAsync(cancellationToken).ConfigureAwait(false)).AliasToName;
+        }
+        catch (Exception exception) when (exception is FileNotFoundException or IOException or UnauthorizedAccessException or YamlDotNet.Core.YamlException)
+        {
+            _aliasToName = new Dictionary<string, string>();
+        }
+        try
+        {
+            _catalog = await metadataProvider.GetAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException)
+        {
+            logger.LogWarning(exception, "无法获取 models.dev 目录，模型名暂按原样记录");
+            _catalog = new Dictionary<string, ModelMetadata>();
+        }
+    }
+
+    /// <summary>把观测行的模型名归一到目录标准 id（别名/变体合并到同一行）；活动行与目录未命中者保持原样。</summary>
+    private IReadOnlyList<UsageObservation> CanonicalizeModels(IReadOnlyList<UsageObservation> observations)
+    {
+        var result = new List<UsageObservation>(observations.Count);
+        var merged = new Dictionary<(DateOnly, string, string, string, string), UsageObservation>();
+        foreach (var item in observations)
+        {
+            var model = item.Client == ActivityClient || item.Model is DefaultModelId or ""
+                ? item.Model
+                : ModelMetadataParser.Canonicalize(_catalog!, item.Model, _aliasToName);
+            if (merged.TryGetValue((item.Date, item.DeviceId, item.Client, item.Provider, model), out var target))
+            {
+                target.InputTokens += item.InputTokens;
+                target.OutputTokens += item.OutputTokens;
+                target.CacheReadTokens += item.CacheReadTokens;
+                target.CacheWriteTokens += item.CacheWriteTokens;
+                target.ReasoningTokens += item.ReasoningTokens;
+                target.MessageCount += item.MessageCount;
+                target.ActiveTimeMs += item.ActiveTimeMs;
+                target.CostUsd += item.CostUsd;
+                continue;
+            }
+            var canonical = new UsageObservation
+            {
+                Date = item.Date,
+                DeviceId = item.DeviceId,
+                Client = item.Client,
+                Provider = item.Provider,
+                Model = model,
+                InputTokens = item.InputTokens,
+                OutputTokens = item.OutputTokens,
+                CacheReadTokens = item.CacheReadTokens,
+                CacheWriteTokens = item.CacheWriteTokens,
+                ReasoningTokens = item.ReasoningTokens,
+                MessageCount = item.MessageCount,
+                ActiveTimeMs = item.ActiveTimeMs,
+                CostUsd = item.CostUsd,
+                ObservedAt = item.ObservedAt
+            };
+            merged[(canonical.Date, canonical.DeviceId, canonical.Client, canonical.Provider, model)] = canonical;
+            result.Add(canonical);
+        }
+        return result;
     }
 
     private IReadOnlyList<UsageObservation> PreserveFullHistoryActivity(

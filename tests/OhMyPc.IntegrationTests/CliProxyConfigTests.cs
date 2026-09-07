@@ -534,7 +534,7 @@ public sealed class CliProxyConfigTests : IDisposable
     }
 
     [Fact]
-    public async Task SavePersistsRemarkAndCostAndRemovesThemWhenCleared()
+    public async Task SavePersistsRemarkAndAliasAndBuildsAliasTable()
     {
         Directory.CreateDirectory(_root);
         await File.WriteAllTextAsync(ConfigPath, BuildFixture());
@@ -543,28 +543,25 @@ public sealed class CliProxyConfigTests : IDisposable
 
         var codex = snapshot.Providers.Single(p => p.Kind == ProxyProviderKind.Codex);
         codex.Remark = "Input 中转";
-        codex.Models[0].Cost = new ProxyModelCost { Input = 5m, Output = 30m, CacheRead = 0.5m };
         await store.SaveAsync(snapshot);
 
         var content = await File.ReadAllTextAsync(ConfigPath);
         Assert.Contains("remark: Input 中转", content);
-        Assert.Contains("cache-read: 0.5", content);
-        Assert.DoesNotContain("cache-write", content);
+        // cost 键不再由本应用读写（费率统一来自 models.dev）；fixture 中已有的 cost 原样保留
+        Assert.DoesNotContain("cache-read", content);
         // 纯数字下游密钥保存后保持带引号（字符串类型）
         Assert.Contains("- '123456'", content);
 
         var reloaded = await store.LoadAsync();
         var reloadedCodex = reloaded.Providers.Single(p => p.Kind == ProxyProviderKind.Codex);
         Assert.Equal("Input 中转", reloadedCodex.Remark);
-        Assert.Equal(5m, reloadedCodex.Models[0].Cost!.Input);
-        Assert.Equal(0.5m, reloadedCodex.Models[0].Cost!.CacheRead);
+        // 别名表用于用量统计的名称归一（fixture 中 GLM 带别名）
+        Assert.Equal("glm-5.3", reloaded.AliasToName["GLM-5.3"]);
 
         reloadedCodex.Remark = null;
-        reloadedCodex.Models[0].Cost = null;
         await store.SaveAsync(reloaded);
         var cleared = await File.ReadAllTextAsync(ConfigPath);
         Assert.DoesNotContain("remark:", cleared);
-        Assert.DoesNotContain("cost:", cleared);
     }
 
     private CliProxyConfigStore CreateStore() =>

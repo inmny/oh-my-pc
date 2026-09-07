@@ -118,9 +118,27 @@ public sealed class LocalUsageRefreshServiceTests : IAsyncLifetime
         IAutomationEventPublisher publisher) => new(
         collector,
         _store,
+        new StubProxyConfigStore(),
+        new StubMetadataProvider(),
         publisher,
         new StubTextLocalizer(),
         NullLogger<LocalUsageRefreshService>.Instance);
+
+    private sealed class StubProxyConfigStore : IProxyConfigStore
+    {
+        public Task<ProxyConfigSnapshot> LoadAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ProxyConfigSnapshot());
+
+        public Task SaveAsync(ProxyConfigSnapshot snapshot, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task<bool> EnsureConfigAsync(CancellationToken cancellationToken = default) => Task.FromResult(false);
+    }
+
+    private sealed class StubMetadataProvider : IModelMetadataProvider
+    {
+        public Task<IReadOnlyDictionary<string, ModelMetadata>> GetAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyDictionary<string, ModelMetadata>>(new Dictionary<string, ModelMetadata>());
+    }
 
     private sealed class MutableUsageCollector : ILocalUsageCollector
     {

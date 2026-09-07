@@ -1,6 +1,8 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
+using OhMyPc.Core;
+using OhMyPc.Core.Domain;
 using OhMyPc.Infrastructure.LocalUsage;
 using ZstdSharp;
 
@@ -9,7 +11,6 @@ namespace OhMyPc.IntegrationTests;
 public sealed class DshUsageCollectorTests : IDisposable
 {
     private readonly string _sessionsRoot = Path.Combine(Path.GetTempPath(), $"oh-my-pc-dsh-{Guid.NewGuid():N}");
-    private string SettingsPath => Path.Combine(_sessionsRoot, "settings.yaml");
 
     public DshUsageCollectorTests() => Directory.CreateDirectory(_sessionsRoot);
 
@@ -94,7 +95,8 @@ public sealed class DshUsageCollectorTests : IDisposable
         await File.WriteAllBytesAsync(
             Path.Combine(invalidDirectory.FullName, "session.jsonl.zstd"),
             [1, 2, 3, 4]);
-        var collector = new DshUsageCollector(_sessionsRoot, SettingsPath, NullLogger<DshUsageCollector>.Instance);
+        // 非空目录才会走「解析结果入缓存」路径，锁文件后第二轮依赖缓存快照
+        var collector = CreateCollector(metadata: Metadata(("gpt-5.6-sol", new ProxyModelCost { Input = 1m })));
 
         var first = await collector.CollectAsync(fullHistory: true);
         using var lockedSession = new FileStream(validPath, FileMode.Open, FileAccess.Read, FileShare.None);
@@ -148,54 +150,31 @@ public sealed class DshUsageCollectorTests : IDisposable
             path,
             CompressFrames(Header(), Assistant(0, UnixMilliseconds(date), "input-im", "model", 10, 5) + "\n"));
         using var lockedSession = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None);
-        var collector = new DshUsageCollector(_sessionsRoot, SettingsPath, NullLogger<DshUsageCollector>.Instance);
+        var collector = CreateCollector();
 
         await Assert.ThrowsAsync<IOException>(() => collector.CollectAsync(fullHistory: true));
     }
 
     [Fact]
-    public async Task Collector_CalculatesRequestWideTieredCostsFromSettings()
+    public async Task Collector_PricesUsageFromCatalog()
     {
         var date = DateOnly.FromDateTime(DateTime.Now);
         var sessionDirectory = Directory.CreateDirectory(Path.Combine(_sessionsRoot, "priced"));
-        await File.WriteAllTextAsync(SettingsPath, """
-            llm-pi-ai:
-              providers:
-                input-im:
-                  models:
-                    - id: priced-model
-                      cost:
-                        input: 1
-                        output: 2
-                        cacheRead: 3
-                        cacheWrite: 4
-                        tiers:
-                          - inputTokensAbove: 200
-                            input: 10
-                            output: 20
-                            cacheRead: 30
-                            cacheWrite: 40
-                          - inputTokensAbove: 300
-                            input: 100
-                            output: 200
-                            cacheRead: 300
-                            cacheWrite: 400
-            """);
         await File.WriteAllBytesAsync(
             Path.Combine(sessionDirectory.FullName, "session.jsonl.zstd"),
             CompressFrames(
                 Header(),
                 Lines(
-                    Assistant(0, UnixMilliseconds(date), "input-im", "priced-model", 100, 10, 50, 50),
-                    Assistant(1, UnixMilliseconds(date), "input-im", "priced-model", 100, 10, 100, 1),
-                    Assistant(2, UnixMilliseconds(date), "input-im", "priced-model", 301, 0))));
-        var collector = new DshUsageCollector(_sessionsRoot, SettingsPath, NullLogger<DshUsageCollector>.Instance);
+                    Assistant(0, UnixMilliseconds(date), "input-im", "priced-model", 1_000_000, 500_000, 250_000, 0),
+                    Assistant(1, UnixMilliseconds(date), "input-im", "unknown-model", 1_000_000, 0))));
+        var collector = CreateCollector(metadata: Metadata(
+            ("priced-model", new ProxyModelCost { Input = 2m, Output = 4m, CacheRead = 0.5m })));
 
-        var row = Assert.Single(await collector.CollectAsync(fullHistory: true));
+        var rows = await collector.CollectAsync(fullHistory: true);
 
-        Assert.Equal(722, row.TotalTokens);
-        Assert.Equal(3, row.MessageCount);
-        Assert.Equal(0.034810m, row.CostUsd);
+        var priced = Assert.Single(rows, row => row.Model == "priced-model");
+        Assert.Equal(2m + 4m * 0.5m + 0.5m * 0.25m, priced.CostUsd);
+        Assert.Equal(0m, Assert.Single(rows, row => row.Model == "unknown-model").CostUsd);
     }
 
     [Fact]
@@ -207,7 +186,7 @@ public sealed class DshUsageCollectorTests : IDisposable
         await File.WriteAllBytesAsync(
             path,
             CompressFrames(Header(), Assistant(0, UnixMilliseconds(date), "input-im", "model", 10, 5) + "\n"));
-        var collector = new DshUsageCollector(_sessionsRoot, SettingsPath, NullLogger<DshUsageCollector>.Instance);
+        var collector = CreateCollector();
 
         var first = Assert.Single(await collector.CollectAsync(fullHistory: true));
         await File.WriteAllBytesAsync(
@@ -223,7 +202,7 @@ public sealed class DshUsageCollectorTests : IDisposable
     }
 
     [Fact]
-    public async Task Collector_RecalculatesCachedSessionsWhenModelCostsChange()
+    public async Task Collector_PricesUsageAfterCatalogBecomesAvailable()
     {
         var date = DateOnly.FromDateTime(DateTime.Now);
         var directory = Directory.CreateDirectory(Path.Combine(_sessionsRoot, "cost-change"));
@@ -231,30 +210,35 @@ public sealed class DshUsageCollectorTests : IDisposable
         await File.WriteAllBytesAsync(
             path,
             CompressFrames(Header(), Assistant(0, UnixMilliseconds(date), "input-im", "priced-model", 1_000_000, 0) + "\n"));
-        await WriteSimpleCostSettingsAsync(inputCost: 1);
-        var collector = new DshUsageCollector(_sessionsRoot, SettingsPath, NullLogger<DshUsageCollector>.Instance);
+        var provider = new StubMetadataProvider(new Dictionary<string, ModelMetadata>());
+        var collector = new DshUsageCollector(_sessionsRoot, provider, NullLogger<DshUsageCollector>.Instance);
 
-        var first = Assert.Single(await collector.CollectAsync(fullHistory: true));
-        await WriteSimpleCostSettingsAsync(inputCost: 2);
-        File.SetLastWriteTimeUtc(SettingsPath, DateTime.UtcNow.AddSeconds(1));
-        var changed = Assert.Single(await collector.CollectAsync(fullHistory: true));
+        var unpriced = Assert.Single(await collector.CollectAsync(fullHistory: true));
+        provider.Metadata = Metadata(("priced-model", new ProxyModelCost { Input = 2m }));
+        var priced = Assert.Single(await collector.CollectAsync(fullHistory: true));
 
-        Assert.Equal(1m, first.CostUsd);
-        Assert.Equal(2m, changed.CostUsd);
+        // 首次目录不可用（空目录）时不计费；目录出现后同一会话按牌价补算
+        Assert.Equal(0m, unpriced.CostUsd);
+        Assert.Equal(2m, priced.CostUsd);
     }
 
-    private Task WriteSimpleCostSettingsAsync(int inputCost) => File.WriteAllTextAsync(SettingsPath, $$"""
-        llm-pi-ai:
-          providers:
-            input-im:
-              models:
-                - id: priced-model
-                  cost:
-                    input: {{inputCost}}
-                    output: 0
-                    cacheRead: 0
-                    cacheWrite: 0
-        """);
+    private static IReadOnlyDictionary<string, ModelMetadata> Metadata(params (string Id, ProxyModelCost Cost)[] entries) =>
+        entries.ToDictionary(
+            entry => entry.Id,
+            entry => new ModelMetadata { Id = entry.Id, Cost = entry.Cost },
+            StringComparer.OrdinalIgnoreCase);
+
+    private DshUsageCollector CreateCollector(
+        IReadOnlyDictionary<string, ModelMetadata>? metadata = null) =>
+        new(_sessionsRoot, new StubMetadataProvider(metadata ?? new Dictionary<string, ModelMetadata>()), NullLogger<DshUsageCollector>.Instance);
+
+    private sealed class StubMetadataProvider(IReadOnlyDictionary<string, ModelMetadata> metadata) : IModelMetadataProvider
+    {
+        public IReadOnlyDictionary<string, ModelMetadata> Metadata { get; set; } = metadata;
+
+        public Task<IReadOnlyDictionary<string, ModelMetadata>> GetAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult(Metadata);
+    }
 
     public void Dispose() => Directory.Delete(_sessionsRoot, recursive: true);
 

@@ -10,25 +10,13 @@ public sealed class ZcodeUsageCollectorTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"oh-my-pc-zcode-{Guid.NewGuid():N}");
     private string DbPath => Path.Combine(_root, "db.sqlite");
-    private string ZcodeConfigPath => Path.Combine(_root, "config.json");
 
-    public ZcodeUsageCollectorTests()
-    {
-        Directory.CreateDirectory(_root);
-        File.WriteAllText(ZcodeConfigPath, """
-            {
-              "provider": {
-                "cpa-gw": { "options": { "baseURL": "http://127.0.0.1:8317" } },
-                "offpeak-idle-plan": { "options": { "baseURL": "https://offpeak.example" } },
-                "builtin-plan": { "options": { "baseURL": "https://builtin.example" } }
-              }
-            }
-            """);
-    }
+    public void SetUp() => Directory.CreateDirectory(_root);
 
     [Fact]
     public async Task Collector_AggregatesCompletedRowsByProviderAndModel()
     {
+        SetUp();
         var date = DateOnly.FromDateTime(DateTime.Now);
         CreateDatabase(
             Row(date, "builtin:bigmodel-coding-plan", "GLM-5.3", input: 6000, output: 200, cacheRead: 5000, cacheWrite: 300, reasoning: 7),
@@ -58,6 +46,7 @@ public sealed class ZcodeUsageCollectorTests : IDisposable
     [Fact]
     public async Task Collector_ConvertsInclusiveInputToUncachedInput()
     {
+        SetUp();
         var date = DateOnly.FromDateTime(DateTime.Now);
         CreateDatabase(
             Row(date, "builtin-plan", "GLM-5.3", input: 10_000, output: 300, cacheRead: 9_000, cacheWrite: 500),
@@ -78,10 +67,11 @@ public sealed class ZcodeUsageCollectorTests : IDisposable
     [Fact]
     public async Task Collector_TodayModeFiltersOtherDays()
     {
+        SetUp();
         var today = DateOnly.FromDateTime(DateTime.Now);
         CreateDatabase(
-            Row(today.AddDays(-2), "cpa-gw", "GPT-5.6-Terra", input: 100, output: 20),
-            Row(today, "cpa-gw", "GPT-5.6-Terra", input: 10, output: 5));
+            Row(today.AddDays(-2), "cpa-gw", "gpt-5.6-terra", input: 100, output: 20),
+            Row(today, "cpa-gw", "gpt-5.6-terra", input: 10, output: 5));
         var collector = CreateCollector();
 
         var todayRow = Assert.Single(await collector.CollectAsync(fullHistory: false));
@@ -92,59 +82,46 @@ public sealed class ZcodeUsageCollectorTests : IDisposable
     }
 
     [Fact]
-    public async Task Collector_GatewayPrefersConfiguredRatesOverCatalog()
+    public async Task Collector_ValuesAllProvidersAtCatalogRates()
     {
+        SetUp();
         var date = DateOnly.FromDateTime(DateTime.Now);
         CreateDatabase(
-            Row(date, "cpa-gw", "GPT-5.6-Terra", input: 3_500_000, output: 500_000, cacheRead: 2_000_000),
-            Row(date, "offpeak-idle-plan", "GPT-5.6-Terra", input: 1_000_000, output: 500_000),
-            Row(date, "builtin-plan", "GPT-5.6-Terra", input: 1_000_000, output: 500_000));
+            Row(date, "cpa-gw", "GPT-5.6-Terra", input: 1_000_000, output: 500_000),
+            Row(date, "builtin-plan", "gpt-5.6-terra-high", input: 1_000_000, output: 500_000));
         var collector = CreateCollector(
-            PricedSnapshot(),
-            metadata: Metadata(("GPT-5.6-Terra", new ProxyModelCost { Input = 99m, Output = 98m })));
+            metadata: Metadata(("gpt-5.6-terra", new ProxyModelCost { Input = 3m, Output = 2m })));
 
         var rows = await collector.CollectAsync(fullHistory: true);
 
-        var gateway = Assert.Single(rows, row => row.Provider == "cpa-gw");
-        // 未命中输入 = 3.5M - 2M = 1.5M
-        Assert.Equal(1.5m + 2m * 0.5m + 0.1m * 2m, gateway.CostUsd);
-        Assert.Equal(99m + 98m * 0.5m, Assert.Single(rows, row => row.Provider == "offpeak-idle-plan").CostUsd);
-        Assert.Equal(99m + 98m * 0.5m, Assert.Single(rows, row => row.Provider == "builtin-plan").CostUsd);
+        // 别名（经 CPA 别名表）与变体后缀名都归一到目录同一费率
+        Assert.Equal(3m + 2m * 0.5m, Assert.Single(rows, row => row.Provider == "cpa-gw").CostUsd);
+        Assert.Equal(3m + 2m * 0.5m, Assert.Single(rows, row => row.Provider == "builtin-plan").CostUsd);
     }
 
     [Fact]
-    public async Task Collector_ValuesSubscriptionUsageAtCatalogRates()
+    public async Task Collector_ValuesUnknownModelsAtZero()
     {
+        SetUp();
         var date = DateOnly.FromDateTime(DateTime.Now);
         CreateDatabase(
             Row(date, "offpeak-idle-plan", "GLM-5.3", input: 6_000_000, output: 1_000_000, cacheRead: 4_000_000),
             Row(date, "builtin-plan", "Unknown-Model", input: 1_000_000, output: 0));
         var collector = CreateCollector(
-            metadata: Metadata(("GLM-5.3", new ProxyModelCost { Input = 1m, Output = 2m, CacheRead = 0.25m })));
+            snapshot: AliasSnapshot("GLM-5.3", "glm-5.3"),
+            metadata: Metadata(("glm-5.3", new ProxyModelCost { Input = 1m, Output = 2m, CacheRead = 0.25m })));
 
         var rows = await collector.CollectAsync(fullHistory: true);
 
-        var glm = Assert.Single(rows, row => row.Model == "GLM-5.3");
-        Assert.Equal(2m * 1m + 1m * 2m + 4m * 0.25m, glm.CostUsd);
+        // 别名 GLM-5.3 → glm-5.3 命中目录费率；未收录模型不计费
+        Assert.Equal(2m * 1m + 1m * 2m + 4m * 0.25m, Assert.Single(rows, row => row.Model == "GLM-5.3").CostUsd);
         Assert.Equal(0m, Assert.Single(rows, row => row.Model == "Unknown-Model").CostUsd);
-    }
-
-    [Fact]
-    public async Task Collector_SkipsCostsWhenProxyConfigMissing()
-    {
-        var date = DateOnly.FromDateTime(DateTime.Now);
-        CreateDatabase(Row(date, "cpa-gw", "GPT-5.6-Terra", input: 1000, output: 200));
-        var collector = CreateCollector(missingProxyConfig: true);
-
-        var row = Assert.Single(await collector.CollectAsync(fullHistory: true));
-
-        Assert.Equal(1200, row.TotalTokens);
-        Assert.Equal(0m, row.CostUsd);
     }
 
     [Fact]
     public async Task Collector_PicksUpNewRowsAfterDatabaseChanges()
     {
+        SetUp();
         var date = DateOnly.FromDateTime(DateTime.Now);
         CreateDatabase(Row(date, "cpa-gw", "GLM-5.3", input: 10, output: 5));
         var collector = CreateCollector();
@@ -162,9 +139,9 @@ public sealed class ZcodeUsageCollectorTests : IDisposable
     [Fact]
     public async Task Collector_ReturnsEmptyWhenDatabaseMissing()
     {
+        SetUp();
         var collector = new ZcodeUsageCollector(
             Path.Combine(_root, "missing.db"),
-            [ZcodeConfigPath],
             new StubProxyStore(new ProxyConfigSnapshot()),
             new StubMetadataProvider(new Dictionary<string, ModelMetadata>()),
             NullLogger<ZcodeUsageCollector>.Instance);
@@ -174,12 +151,10 @@ public sealed class ZcodeUsageCollectorTests : IDisposable
 
     private ZcodeUsageCollector CreateCollector(
         ProxyConfigSnapshot? snapshot = null,
-        bool missingProxyConfig = false,
         IReadOnlyDictionary<string, ModelMetadata>? metadata = null) =>
         new(
             DbPath,
-            [ZcodeConfigPath],
-            new StubProxyStore(missingProxyConfig ? null : snapshot ?? new ProxyConfigSnapshot()),
+            new StubProxyStore(snapshot ?? new ProxyConfigSnapshot()),
             new StubMetadataProvider(metadata ?? new Dictionary<string, ModelMetadata>()),
             NullLogger<ZcodeUsageCollector>.Instance);
 
@@ -189,7 +164,7 @@ public sealed class ZcodeUsageCollectorTests : IDisposable
             entry => new ModelMetadata { Id = entry.Id, Cost = entry.Cost },
             StringComparer.OrdinalIgnoreCase);
 
-    private static ProxyConfigSnapshot PricedSnapshot() => new()
+    private static ProxyConfigSnapshot AliasSnapshot(string alias, string name) => new()
     {
         Providers =
         [
@@ -198,15 +173,7 @@ public sealed class ZcodeUsageCollectorTests : IDisposable
                 Kind = ProxyProviderKind.Codex,
                 ApiKey = "k",
                 BaseUrl = "https://relay.example",
-                Models =
-                [
-                    new ProxyModelConfig
-                    {
-                        Name = "gpt-5.6-terra",
-                        Alias = "GPT-5.6-Terra",
-                        Cost = new ProxyModelCost { Input = 1m, Output = 2m, CacheRead = 0.1m, CacheWrite = 3m }
-                    }
-                ]
+                Models = [new ProxyModelConfig { Name = name, Alias = alias }]
             }
         ]
     };
@@ -296,5 +263,8 @@ public sealed class ZcodeUsageCollectorTests : IDisposable
             Task.FromResult(metadata);
     }
 
-    public void Dispose() => Directory.Delete(_root, recursive: true);
+    public void Dispose()
+    {
+        if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);
+    }
 }

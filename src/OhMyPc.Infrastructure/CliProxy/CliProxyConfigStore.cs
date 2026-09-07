@@ -71,7 +71,12 @@ public sealed class CliProxyConfigStore(string? configPath = null, string? authD
             Port = YamlTree.GetInt32(root, "port", 8317),
             ApiKeys = [.. YamlTree.StringList(root, "api-keys")]
         };
-        return new ProxyConfigSnapshot { Providers = providers, Routing = routing, Access = access };
+        var aliasToName = providers
+            .SelectMany(provider => provider.Models)
+            .Where(model => !string.IsNullOrWhiteSpace(model.Alias))
+            .GroupBy(model => model.Alias!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().Name, StringComparer.OrdinalIgnoreCase);
+        return new ProxyConfigSnapshot { Providers = providers, Routing = routing, Access = access, AliasToName = aliasToName };
     }
 
     public async Task SaveAsync(ProxyConfigSnapshot snapshot, CancellationToken cancellationToken = default)
@@ -124,18 +129,8 @@ public sealed class CliProxyConfigStore(string? configPath = null, string? authD
         MaxContextLength = YamlTree.GetInt64OrNull(node, "max-context-length"),
         ThinkingLevels = [.. YamlTree.StringList(GetMapping(node, "thinking"), "levels")],
         InputModalities = [.. YamlTree.StringList(node, "input-modalities")],
-        OutputModalities = [.. YamlTree.StringList(node, "output-modalities")],
-        Cost = LoadCost(YamlTree.Mapping(node, "cost"))
+        OutputModalities = [.. YamlTree.StringList(node, "output-modalities")]
     };
-
-    private static ProxyModelCost? LoadCost(YamlMappingNode? node) =>
-        node is null ? null : new ProxyModelCost
-        {
-            Input = YamlTree.GetDecimalOrNull(node, "input"),
-            Output = YamlTree.GetDecimalOrNull(node, "output"),
-            CacheRead = YamlTree.GetDecimalOrNull(node, "cache-read"),
-            CacheWrite = YamlTree.GetDecimalOrNull(node, "cache-write")
-        };
 
     private static void SaveProviders(YamlMappingNode root, string section, IEnumerable<ProxyProviderConfig> providers)
     {
@@ -194,28 +189,7 @@ public sealed class CliProxyConfigStore(string? configPath = null, string? authD
         else YamlTree.Remove(node, "input-modalities");
         if (model.OutputModalities.Count > 0) YamlTree.SetStringList(node, "output-modalities", model.OutputModalities);
         else YamlTree.Remove(node, "output-modalities");
-        SaveCost(node, model.Cost);
+        // cost 键（CLIProxyAPI 忽略的本应用遗留字段）不再读写：费率统一来自 models.dev 目录
         return node;
-    }
-
-    /// <summary>费用存于模型条目 cost 键（CLIProxyAPI 忽略）；逐键更新，清空的键会被移除。</summary>
-    private static void SaveCost(YamlMappingNode node, ProxyModelCost? cost)
-    {
-        if (cost is null || cost.IsEmpty)
-        {
-            YamlTree.Remove(node, "cost");
-            return;
-        }
-        var target = YamlTree.GetOrCreateMapping(node, "cost");
-        UpsertDecimal(target, "input", cost.Input);
-        UpsertDecimal(target, "output", cost.Output);
-        UpsertDecimal(target, "cache-read", cost.CacheRead);
-        UpsertDecimal(target, "cache-write", cost.CacheWrite);
-    }
-
-    private static void UpsertDecimal(YamlMappingNode map, string key, decimal? value)
-    {
-        if (value is not null) map.Children[YamlTree.Key(key)] = YamlTree.Plain(value.Value.ToString(CultureInfo.InvariantCulture));
-        else YamlTree.Remove(map, key);
     }
 }

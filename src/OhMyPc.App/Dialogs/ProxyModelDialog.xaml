@@ -31,35 +31,6 @@
                 <TextBox x:Name="ContextBox" Width="180" HorizontalAlignment="Left" />
             </StackPanel>
 
-            <Label Content="{DynamicResource Proxy_CostSection}" Margin="0,0,0,6" />
-            <Grid Margin="0,0,0,16">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="12" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="12" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="12" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <StackPanel>
-                    <Label Content="{DynamicResource Proxy_CostInput}" FontSize="11" Padding="0,0,0,4" />
-                    <TextBox x:Name="CostInputBox" />
-                </StackPanel>
-                <StackPanel Grid.Column="2">
-                    <Label Content="{DynamicResource Proxy_CostOutput}" FontSize="11" Padding="0,0,0,4" />
-                    <TextBox x:Name="CostOutputBox" />
-                </StackPanel>
-                <StackPanel Grid.Column="4">
-                    <Label Content="{DynamicResource Proxy_CostCacheRead}" FontSize="11" Padding="0,0,0,4" />
-                    <TextBox x:Name="CostCacheReadBox" />
-                </StackPanel>
-                <StackPanel Grid.Column="6">
-                    <Label Content="{DynamicResource Proxy_CostCacheWrite}" FontSize="11" Padding="0,0,0,4" />
-                    <TextBox x:Name="CostCacheWriteBox" />
-                </StackPanel>
-            </Grid>
-
             <Label Content="{DynamicResource ProxyModelDialog_Levels}" Margin="0,0,0,6" />
             <WrapPanel x:Name="LevelsPanel" Margin="0,0,0,14" />
 
