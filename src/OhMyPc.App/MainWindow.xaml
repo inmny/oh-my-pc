@@ -257,7 +257,62 @@
                                                 </Style>
                                             </ItemsControl.ItemContainerStyle>
                                             <ItemsControl.ItemTemplate>
-                                                <DataTemplate><Border Style="{StaticResource ContributionCell}" ToolTip="{Binding Tooltip}" /></DataTemplate>
+                                                <DataTemplate>
+                                                    <Border Style="{StaticResource ContributionCell}">
+                                                        <Border.ToolTip>
+                                                            <ToolTip Style="{StaticResource CardToolTip}">
+                                                                <StackPanel>
+                                                                    <TextBlock Text="{Binding DateText}" FontWeight="SemiBold" Foreground="#E6ECE9" Margin="0,0,0,5" />
+                                                                    <Grid>
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="Auto" SharedSizeGroup="TooltipLabel" />
+                                                                            <ColumnDefinition />
+                                                                        </Grid.ColumnDefinitions>
+                                                                        <Grid.RowDefinitions>
+                                                                            <RowDefinition Height="Auto" />
+                                                                            <RowDefinition Height="Auto" />
+                                                                            <RowDefinition Height="Auto" />
+                                                                            <RowDefinition Height="Auto" />
+                                                                        </Grid.RowDefinitions>
+                                                                        <Grid.Resources>
+                                                                            <Style TargetType="TextBlock">
+                                                                                <Setter Property="FontSize" Value="11" />
+                                                                                <Setter Property="Margin" Value="0,0,0,3" />
+                                                                            </Style>
+                                                                            <Style x:Key="CardLabel" TargetType="TextBlock">
+                                                                                <Setter Property="Foreground" Value="#9AA8A1" />
+                                                                                <Setter Property="Margin" Value="0,0,16,3" />
+                                                                            </Style>
+                                                                        </Grid.Resources>
+                                                                        <TextBlock Text="{DynamicResource Overview_TooltipTotal}" Style="{StaticResource CardLabel}" />
+                                                                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                                            <TextBlock Text="{Binding TokensText}" Foreground="#E6ECE9" Margin="0,0,6,3" />
+                                                                            <TextBlock Text="{Binding TrendText}" FontSize="11" FontWeight="SemiBold">
+                                                                                <TextBlock.Style>
+                                                                                    <Style TargetType="TextBlock">
+                                                                                        <Setter Property="Foreground" Value="#9AA8A1" />
+                                                                                        <Style.Triggers>
+                                                                                            <DataTrigger Binding="{Binding TrendArrow}" Value="↑">
+                                                                                                <Setter Property="Foreground" Value="#F06A6A" />
+                                                                                            </DataTrigger>
+                                                                                            <DataTrigger Binding="{Binding TrendArrow}" Value="↓">
+                                                                                                <Setter Property="Foreground" Value="#53C892" />
+                                                                                            </DataTrigger>
+                                                                                        </Style.Triggers>
+                                                                                    </Style>
+                                                                                </TextBlock.Style>
+                                                                            </TextBlock>
+                                                                        </StackPanel>
+                                                                        <TextBlock Grid.Row="1" Text="{DynamicResource Overview_TooltipCost}" Style="{StaticResource CardLabel}" />
+                                                                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding CostText}" Foreground="#E6ECE9" />
+                                                                        <TextBlock Grid.Row="2" Text="{DynamicResource Overview_TooltipMessages}" Style="{StaticResource CardLabel}" />
+                                                                        <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding MessagesText}" Foreground="#E6ECE9" />
+                                                                    </Grid>
+                                                                </StackPanel>
+                                                            </ToolTip>
+                                                        </Border.ToolTip>
+                                                    </Border>
+                                                </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
                                         <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
@@ -283,7 +338,7 @@
                                     <RowDefinition Height="125" />
                                 </Grid.RowDefinitions>
                                 <TextBlock Text="{DynamicResource Overview_WeeklyCandles}" FontWeight="SemiBold" Margin="4,0,0,8" />
-                                <lvc:CartesianChart Grid.Row="1"
+                                <lvc:CartesianChart x:Name="WeeklyUsageChart" Grid.Row="1"
                                                     Series="{Binding WeeklyUsageSeries}"
                                                      XAxes="{Binding WeeklyUsageXAxes}"
                                                      YAxes="{Binding WeeklyUsageYAxes}"
@@ -292,7 +347,7 @@
                                                     LegendPosition="Hidden"
                                                     DrawMarginFrame="{x:Null}" />
                                 <TextBlock Grid.Row="2" Text="{DynamicResource Overview_WeeklyMessages}" FontWeight="SemiBold" Margin="4,12,0,2" />
-                                <lvc:CartesianChart Grid.Row="3"
+                                <lvc:CartesianChart x:Name="WeeklyMessageChart" Grid.Row="3"
                                                     Series="{Binding WeeklyMessageSeries}"
                                                      XAxes="{Binding WeeklyMessageXAxes}"
                                                      YAxes="{Binding WeeklyMessageYAxes}"

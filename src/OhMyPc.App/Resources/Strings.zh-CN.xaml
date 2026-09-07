@@ -37,6 +37,17 @@
     <sys:String x:Key="Overview_Less">少</sys:String>
     <sys:String x:Key="Overview_More">多</sys:String>
     <sys:String x:Key="Overview_WeeklyCandles">每周用量 K 线</sys:String>
+    <sys:String x:Key="Common_MessagesCount">{0:N0} 条消息</sys:String>
+    <sys:String x:Key="Overview_TooltipWeekRange">{0} 周</sys:String>
+    <sys:String x:Key="Overview_TooltipTotal">总量</sys:String>
+    <sys:String x:Key="Overview_TooltipCost">费用</sys:String>
+    <sys:String x:Key="Overview_TooltipMessages">消息</sys:String>
+    <sys:String x:Key="Overview_TooltipPeak">峰值</sys:String>
+    <sys:String x:Key="Overview_TooltipTrough">最低</sys:String>
+    <sys:String x:Key="Overview_TooltipDailyAverage">日均</sys:String>
+    <sys:String x:Key="Overview_TooltipActiveDays">{0} / 天 · 活跃 {1} 天</sys:String>
+    <sys:String x:Key="Overview_TooltipTrendUp">↑ {0}%</sys:String>
+    <sys:String x:Key="Overview_TooltipTrendDown">↓ {0}%</sys:String>
     <sys:String x:Key="Overview_WeeklyMessages">每周消息量</sys:String>
     <sys:String x:Key="Overview_UsageBreakdown">用量明细</sys:String>
     <sys:String x:Key="Overview_ByTool">工具</sys:String>

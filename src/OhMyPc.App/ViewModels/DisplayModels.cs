@@ -99,8 +99,9 @@ public sealed class ContributionDayViewModel(DateOnly date, double left, double 
 {
     private long _tokens;
     private long _messages;
+    private decimal _cost;
+    private long _previousTokens;
     private int _level;
-    private string _tooltip = "";
 
     public DateOnly Date { get; } = date;
     public double Left { get; } = left;
@@ -108,19 +109,48 @@ public sealed class ContributionDayViewModel(DateOnly date, double left, double 
     public long Tokens { get => _tokens; private set => Set(ref _tokens, value); }
     public long Messages { get => _messages; private set => Set(ref _messages, value); }
     public int Level { get => _level; private set => Set(ref _level, value); }
-    public string Tooltip { get => _tooltip; private set => Set(ref _tooltip, value); }
 
-    public void Update(UsageTrendPoint point, LocalizationService text)
+    public string TokensText => Controls.WeeklyUsageTooltip.Tokens(Tokens);
+    public string CostText => Cost.ToString("$#,##0.00");
+    public string MessagesText => Messages.ToString("N0");
+    public string DateText => Date.ToString("yyyy-MM-dd");
+
+    private decimal Cost => _cost;
+
+    /// <summary>环比方向箭头（↑/↓/±），供界面触发器切换颜色；无对比时为 null。</summary>
+    public string? TrendArrow => TrendText is null or "±0%" ? null : TrendText[..1];
+
+    /// <summary>与前一日对比的环比文案：首日（无前一日数据）不显示。</summary>
+    public string? TrendText
+    {
+        get
+        {
+            if (_previousTokens <= 0) return null;
+            if (Tokens > _previousTokens)
+            {
+                return Controls.WeeklyUsageTooltip.TrendUpText((double)(Tokens - _previousTokens) * 100 / _previousTokens);
+            }
+            return Tokens < _previousTokens
+                ? Controls.WeeklyUsageTooltip.TrendDownText((double)(_previousTokens - Tokens) * 100 / _previousTokens)
+                : "±0%";
+        }
+    }
+
+    public void Update(UsageTrendPoint point, long previousTokens, LocalizationService text)
     {
         Tokens = point.TotalTokens;
         Messages = point.MessageCount;
-        RefreshText(text);
+        _cost = point.CostUsd;
+        _previousTokens = previousTokens;
+        Raise(nameof(CostText));
+        Raise(nameof(TokensText));
+        Raise(nameof(MessagesText));
+        Raise(nameof(DateText));
+        Raise(nameof(TrendText));
+        Raise(nameof(TrendArrow));
     }
 
     public void SetLevel(int level) => Level = level;
-
-    public void RefreshText(LocalizationService text) =>
-        Tooltip = text.Format("Overview_DayTooltip", Date, Tokens, Messages);
 }
 
 public sealed record ContributionMonthLabel(string Text, double Left);

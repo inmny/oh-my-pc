@@ -33,6 +33,14 @@ public partial class MainWindow : Window
         _logger = logger;
         InitializeComponent();
         DataContext = viewModel;
+        // 自研悬浮框直接挂到图表控件上（不依赖 LiveCharts 的 tooltip 管线）。
+        // 关闭默认 tooltip 必须用 Hidden 而非 Tooltip=null：Loaded 应用主题时会 Tooltip ??= 默认值，null 会被回填
+        viewModel.CandleTooltip.Attach(WeeklyUsageChart);
+        viewModel.MessageTooltip.Attach(WeeklyMessageChart);
+        WeeklyUsageChart.TooltipPosition = LiveChartsCore.Measure.TooltipPosition.Hidden;
+        WeeklyMessageChart.TooltipPosition = LiveChartsCore.Measure.TooltipPosition.Hidden;
+        WeeklyUsageChart.Tooltip = null;
+        WeeklyMessageChart.Tooltip = null;
     }
 
     private MainViewModel ViewModel => (MainViewModel)DataContext;

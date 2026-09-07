@@ -97,6 +97,26 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <!-- 热力图卡片段落式悬浮框：与每周 K 线自研悬浮框同配色 -->
+        <Style x:Key="CardToolTip" TargetType="ToolTip" BasedOn="{StaticResource {x:Type ToolTip}}">
+            <Setter Property="Background" Value="#242C27" />
+            <Setter Property="BorderBrush" Value="#3A4A40" />
+            <Setter Property="Padding" Value="12,9" />
+            <Setter Property="HasDropShadow" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToolTip">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter TextElement.Foreground="#E6ECE9" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style TargetType="Button">
             <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
             <Setter Property="Background" Value="{StaticResource PanelRaisedBrush}" />

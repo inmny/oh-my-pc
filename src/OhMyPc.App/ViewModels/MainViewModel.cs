@@ -50,6 +50,9 @@ public sealed class MainViewModel : ViewModelBase
     private readonly SemaphoreSlim _usageRefreshGate = new(1, 1);
     private readonly CandlesticksSeries<FinancialPointI> _weeklyUsageSeries;
     private readonly ColumnSeries<ObservableValue> _weeklyMessageSeries;
+    private readonly Controls.WeeklyUsageTooltip _candleTooltip;
+    private readonly Controls.WeeklyUsageTooltip _messageTooltip;
+    private Dictionary<int, WeeklyUsageSummary> _weeklySummaries = [];
     private DateOnly _usageStart;
     private DateOnly _usageEnd;
     private bool _usageInitialized;
@@ -112,6 +115,8 @@ public sealed class MainViewModel : ViewModelBase
             Stroke = null,
             MaxBarWidth = 12
         };
+        _candleTooltip = new Controls.WeeklyUsageTooltip(text, compact: false);
+        _messageTooltip = new Controls.WeeklyUsageTooltip(text, compact: true);
         WeeklyUsageSeries = [_weeklyUsageSeries];
         WeeklyUsageXAxes = [CreateCategoryAxis(_weeklyLabels, 4, ContributionWeekCount)];
         WeeklyUsageYAxes = [CreateValueAxis()];
@@ -204,13 +209,16 @@ public sealed class MainViewModel : ViewModelBase
     public bool IsBreakdownMonth => _breakdownPeriod == UsageBreakdownPeriod.Month;
     public bool IsBreakdownAll => _breakdownPeriod == UsageBreakdownPeriod.All;
     public double ContributionGridWidth => ContributionWeekCount * ContributionCellStride - 4;
-    public ISeries[] WeeklyUsageSeries { get; }
+    public IReadOnlyList<ISeries> WeeklyUsageSeries { get; }
     public Axis[] WeeklyUsageXAxes { get; }
     public Axis[] WeeklyUsageYAxes { get; }
     public ISeries[] WeeklyMessageSeries { get; }
     public Axis[] WeeklyMessageXAxes { get; }
     public Axis[] WeeklyMessageYAxes { get; }
     public Margin WeeklyChartDrawMargin { get; } = new(82, Margin.Auto, 28, Margin.Auto);
+    /// <summary>两张图表的自定义悬浮框实例（XAML 直接绑定到图表 Tooltip 属性）。</summary>
+    public Controls.WeeklyUsageTooltip CandleTooltip => _candleTooltip;
+    public Controls.WeeklyUsageTooltip MessageTooltip => _messageTooltip;
 
     public async Task LoadAsync()
     {
@@ -467,7 +475,7 @@ public sealed class MainViewModel : ViewModelBase
             var week = (date.DayNumber - _usageStart.DayNumber) / 7;
             var day = ((int)date.DayOfWeek + 6) % 7;
             var cell = new ContributionDayViewModel(date, week * ContributionCellStride, day * ContributionCellStride);
-            cell.Update(_usageByDate[date], _text);
+            cell.Update(_usageByDate[date], PreviousDayTokens(date), _text);
             ContributionDays.Add(cell);
             _contributionByDate[date] = cell;
         }
@@ -484,6 +492,7 @@ public sealed class MainViewModel : ViewModelBase
         }
         _weeklyLabels.Clear();
         _weeklyLabels.AddRange(_weekIndexes.OrderBy(x => x.Value).Select(x => x.Key.ToString("MM-dd")));
+        RefreshWeeklySummaries();
 
         UpdateContributionLevels();
         UpdateTodayUsage();
@@ -505,7 +514,12 @@ public sealed class MainViewModel : ViewModelBase
         foreach (var date in changedDates)
         {
             var point = _usageByDate[date];
-            _contributionByDate[date].Update(point, _text);
+            // 当日变化会同时影响次日（环比）的展示，一并刷新
+            _contributionByDate[date].Update(point, PreviousDayTokens(date), _text);
+            if (_contributionByDate.TryGetValue(date.AddDays(1), out var nextCell))
+            {
+                nextCell.Update(_usageByDate[date.AddDays(1)], point.TotalTokens, _text);
+            }
         }
 
         foreach (var weekStart in changedDates.Select(StartOfWeek).Distinct())
@@ -514,9 +528,28 @@ public sealed class MainViewModel : ViewModelBase
             _weeklyUsageValues[weekIndex] = BuildWeeklyCandle(weekStart);
             _weeklyMessageValues[weekIndex].Value = BuildWeeklyMessages(weekStart).Value;
         }
+        RefreshWeeklySummaries();
 
         UpdateContributionLevels();
         UpdateTodayUsage();
+    }
+
+    /// <summary>date 前一日的总 tokens（范围外记 0，环比不显示）。</summary>
+    private long PreviousDayTokens(DateOnly date) =>
+        date > _usageStart ? _usageByDate.GetValueOrDefault(date.AddDays(-1)).TotalTokens : 0;
+
+    /// <summary>重建每周摘要供 tooltip 查询（含上周环比）。</summary>
+    private void RefreshWeeklySummaries()
+    {
+        var daily = _usageByDate.ToDictionary(
+            pair => pair.Key,
+            pair => (pair.Value.TotalTokens, pair.Value.CostUsd, pair.Value.MessageCount));
+        var summaries = WeeklyUsageSummaries.Build(_usageStart, _usageEnd, daily);
+        _weeklySummaries = summaries
+            .Select((summary, index) => (summary, index))
+            .ToDictionary(pair => pair.index, pair => pair.summary);
+        _candleTooltip.Summaries = _weeklySummaries;
+        _messageTooltip.Summaries = _weeklySummaries;
     }
 
     private FinancialPointI BuildWeeklyCandle(DateOnly weekStart)
@@ -617,7 +650,6 @@ public sealed class MainViewModel : ViewModelBase
             ContributionMonths.Add(new ContributionMonthLabel(date.ToString("MMM"), week * ContributionCellStride));
             previousMonth = date.Month;
         }
-        foreach (var cell in ContributionDays) cell.RefreshText(_text);
         foreach (var row in UsageBreakdownRows) row.RefreshText();
         _weeklyUsageSeries.Name = _text["Overview_WeeklyCandles"];
         _weeklyMessageSeries.Name = _text["Overview_WeeklyMessages"];

@@ -37,6 +37,17 @@
     <sys:String x:Key="Overview_Less">Less</sys:String>
     <sys:String x:Key="Overview_More">More</sys:String>
     <sys:String x:Key="Overview_WeeklyCandles">Weekly usage candlesticks</sys:String>
+    <sys:String x:Key="Common_MessagesCount">{0:N0} messages</sys:String>
+    <sys:String x:Key="Overview_TooltipWeekRange">Week of {0}</sys:String>
+    <sys:String x:Key="Overview_TooltipTotal">Total</sys:String>
+    <sys:String x:Key="Overview_TooltipCost">Cost</sys:String>
+    <sys:String x:Key="Overview_TooltipMessages">Messages</sys:String>
+    <sys:String x:Key="Overview_TooltipPeak">Peak</sys:String>
+    <sys:String x:Key="Overview_TooltipTrough">Low</sys:String>
+    <sys:String x:Key="Overview_TooltipDailyAverage">Daily avg</sys:String>
+    <sys:String x:Key="Overview_TooltipActiveDays">{0} / day · {1} active days</sys:String>
+    <sys:String x:Key="Overview_TooltipTrendUp">↑ {0}%</sys:String>
+    <sys:String x:Key="Overview_TooltipTrendDown">↓ {0}%</sys:String>
     <sys:String x:Key="Overview_WeeklyMessages">Weekly message volume</sys:String>
     <sys:String x:Key="Overview_UsageBreakdown">Usage breakdown</sys:String>
     <sys:String x:Key="Overview_ByTool">Tools</sys:String>
