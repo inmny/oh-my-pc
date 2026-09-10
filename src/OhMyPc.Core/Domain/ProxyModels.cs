@@ -3,7 +3,9 @@ namespace OhMyPc.Core.Domain;
 public enum ProxyProviderKind
 {
     Claude,
-    Codex
+    Codex,
+    /// <summary>OpenAI 兼容（Chat Completions 协议），存于 CPA 的 openai-compatibility 段。</summary>
+    OpenAiCompatible
 }
 
 public enum ProxyProcessState

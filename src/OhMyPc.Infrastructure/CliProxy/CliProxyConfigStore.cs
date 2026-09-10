@@ -14,6 +14,7 @@ public sealed class CliProxyConfigStore(string? configPath = null, string? authD
 {
     private const string ClaudeSection = "claude-api-key";
     private const string CodexSection = "codex-api-key";
+    private const string OpenAiCompatSection = "openai-compatibility";
 
     private readonly string _configPath = configPath ?? CliProxyPaths.ConfigPath;
     private readonly string _authDirectory = authDirectory ?? CliProxyPaths.AuthDirectory;
@@ -57,6 +58,7 @@ public sealed class CliProxyConfigStore(string? configPath = null, string? authD
         var providers = new List<ProxyProviderConfig>();
         providers.AddRange(LoadProviders(root, ClaudeSection, ProxyProviderKind.Claude));
         providers.AddRange(LoadProviders(root, CodexSection, ProxyProviderKind.Codex));
+        providers.AddRange(LoadOpenAiCompatProviders(root));
 
         var routing = new ProxyRoutingConfig
         {
@@ -98,6 +100,7 @@ public sealed class CliProxyConfigStore(string? configPath = null, string? authD
 
             SaveProviders(root, ClaudeSection, snapshot.Providers.Where(p => p.Kind == ProxyProviderKind.Claude));
             SaveProviders(root, CodexSection, snapshot.Providers.Where(p => p.Kind == ProxyProviderKind.Codex));
+            SaveOpenAiCompatProviders(root, snapshot.Providers.Where(p => p.Kind == ProxyProviderKind.OpenAiCompatible));
             ConfigFileSafety.WriteAllText(_configPath, YamlTree.Save(root));
         }
         finally
@@ -131,6 +134,71 @@ public sealed class CliProxyConfigStore(string? configPath = null, string? authD
         InputModalities = [.. YamlTree.StringList(node, "input-modalities")],
         OutputModalities = [.. YamlTree.StringList(node, "output-modalities")]
     };
+
+    /// <summary>openai-compatibility 段：条目形状为 name/base-url/api-key-entries[]/models，取首个 api-key 作为该 provider 的密钥。</summary>
+    private static IEnumerable<ProxyProviderConfig> LoadOpenAiCompatProviders(YamlMappingNode root) =>
+        YamlTree.Sequence(root, OpenAiCompatSection)?.Children.OfType<YamlMappingNode>().Select(node => new ProxyProviderConfig
+        {
+            Kind = ProxyProviderKind.OpenAiCompatible,
+            ApiKey = YamlTree.Sequence(node, "api-key-entries")?.Children.OfType<YamlMappingNode>()
+                .Select(entry => YamlTree.Scalar(entry, "api-key")).FirstOrDefault(key => !string.IsNullOrWhiteSpace(key)) ?? "",
+            BaseUrl = YamlTree.Scalar(node, "base-url") ?? "",
+            Remark = YamlTree.Scalar(node, "name"),
+            Models = [.. YamlTree.Sequence(node, "models")?.Children.OfType<YamlMappingNode>().Select(LoadModel) ?? []]
+        }) ?? [];
+
+    /// <summary>重建 openai-compatibility 段：按 base-url 匹配既有条目保留未知键；remark 写入 name（缺省取地址主机名）。</summary>
+    private static void SaveOpenAiCompatProviders(YamlMappingNode root, IEnumerable<ProxyProviderConfig> providers)
+    {
+        var list = providers.ToList();
+        if (list.Count == 0)
+        {
+            YamlTree.Remove(root, OpenAiCompatSection);
+            return;
+        }
+        var existing = YamlTree.Sequence(root, OpenAiCompatSection);
+        var rebuilt = new YamlSequenceNode(list.Select(provider => UpsertOpenAiCompatProvider(existing, provider)));
+        root.Children[YamlTree.Key(OpenAiCompatSection)] = rebuilt;
+    }
+
+    private static YamlMappingNode UpsertOpenAiCompatProvider(YamlSequenceNode? existing, ProxyProviderConfig provider)
+    {
+        var node = existing?.Children.OfType<YamlMappingNode>().FirstOrDefault(candidate =>
+                string.Equals(YamlTree.Scalar(candidate, "base-url"), provider.BaseUrl, StringComparison.Ordinal))
+            ?? new YamlMappingNode();
+        var name = string.IsNullOrWhiteSpace(provider.Remark) ? FallbackName(provider.BaseUrl) : provider.Remark.Trim();
+        YamlTree.SetScalar(node, "name", name);
+        YamlTree.SetScalar(node, "base-url", provider.BaseUrl);
+        // 密钥未变更时保留既有 api-key-entries（可能含多密钥）；变更则整体替换为单密钥
+        var existingKey = YamlTree.Sequence(node, "api-key-entries")?.Children.OfType<YamlMappingNode>()
+            .Select(entry => YamlTree.Scalar(entry, "api-key")).FirstOrDefault(key => !string.IsNullOrWhiteSpace(key));
+        if (!string.Equals(existingKey, provider.ApiKey, StringComparison.Ordinal))
+        {
+            node.Children[YamlTree.Key("api-key-entries")] = new YamlSequenceNode([new YamlMappingNode
+            {
+                Children = { [YamlTree.Key("api-key")] = YamlTree.Text(provider.ApiKey) }
+            }]);
+        }
+        else if (!node.Children.ContainsKey(YamlTree.Key("api-key-entries")))
+        {
+            node.Children[YamlTree.Key("api-key-entries")] = new YamlSequenceNode([new YamlMappingNode
+            {
+                Children = { [YamlTree.Key("api-key")] = YamlTree.Text(provider.ApiKey) }
+            }]);
+        }
+        node.Children[YamlTree.Key("models")] = BuildModelsNode(YamlTree.Sequence(node, "models"), provider.Models);
+        return node;
+    }
+
+    private static string FallbackName(string baseUrl)
+    {
+        var host = baseUrl.TrimEnd('/');
+        var scheme = host.IndexOf("://", StringComparison.Ordinal);
+        if (scheme >= 0) host = host[(scheme + 3)..];
+        var slash = host.IndexOf('/', StringComparison.Ordinal);
+        if (slash > 0) host = host[..slash];
+        return host;
+    }
 
     private static void SaveProviders(YamlMappingNode root, string section, IEnumerable<ProxyProviderConfig> providers)
     {

@@ -267,6 +267,138 @@ public sealed class CliProxyConfigTests : IDisposable
     }
 
     [Fact]
+    public async Task LoadAndSave_RoundTripsOpenAiCompatProviders()
+    {
+        Directory.CreateDirectory(_root);
+        await File.WriteAllTextAsync(ConfigPath, """
+            host: 127.0.0.1
+            port: 8317
+            openai-compatibility:
+              - name: OpenRouter
+                base-url: 'https://openrouter.ai/api/v1'
+                request-log: true
+                api-key-entries:
+                  - api-key: 'sk-or-1'
+                  - api-key: 'sk-or-2'
+                models:
+                  - name: org/kimi-k2
+                    alias: kimi-k2
+            """);
+        var store = CreateStore();
+        var snapshot = await store.LoadAsync();
+
+        var compat = snapshot.Providers.Single(p => p.Kind == ProxyProviderKind.OpenAiCompatible);
+        Assert.Equal("https://openrouter.ai/api/v1", compat.BaseUrl);
+        // 取首个 api-key 作为 provider 密钥
+        Assert.Equal("sk-or-1", compat.ApiKey);
+        Assert.Equal("OpenRouter", compat.Remark);
+        var kimi = Assert.Single(compat.Models);
+        Assert.Equal("org/kimi-k2", kimi.Name);
+        Assert.Equal("kimi-k2", kimi.Alias);
+
+        // 改名后保存：未知键（request-log）与第二个 api-key 条目保留，name 取 remark
+        compat.Remark = "OR 中转";
+        await store.SaveAsync(snapshot);
+        var content = await File.ReadAllTextAsync(ConfigPath);
+        Assert.Contains("name: OR 中转", content);
+        Assert.Contains("request-log: true", content);
+        Assert.Contains("sk-or-2", content);
+
+        // 清空该类型后整段移除
+        snapshot.Providers.Remove(compat);
+        await store.SaveAsync(snapshot);
+        var cleared = await File.ReadAllTextAsync(ConfigPath);
+        Assert.DoesNotContain("openai-compatibility:", cleared);
+    }
+
+    [Fact]
+    public async Task SyncZcode_DirectOpenAiCompatibleUsesChatProtocol()
+    {
+        Directory.CreateDirectory(_root);
+        var desktopConfig = Path.Combine(_root, "zcode-config.json");
+        var cliConfig = Path.Combine(_root, "zcode-cli-config.json");
+        await File.WriteAllTextAsync(desktopConfig, "{}");
+        await File.WriteAllTextAsync(cliConfig, "{}");
+        var configurator = new CliProxyClientConfigurator(
+            zcodeDesktopConfig: desktopConfig,
+            zcodeCliConfig: cliConfig,
+            opencodeConfig: Path.Combine(_root, "missing-opencode.json"),
+            dshSettings: Path.Combine(_root, "missing-dsh.yaml"),
+            dshCredentials: Path.Combine(_root, "missing-cred.yaml"));
+
+        var upstream = new ClientSyncUpstream(
+            "or-key|https://openrouter.ai/api/v1", "OpenRouter", "https://openrouter.ai/api/v1", "sk-or",
+            ProxyProviderKind.OpenAiCompatible,
+            [new ProxyModelConfig { Name = "org/kimi-k2", Alias = "kimi-k2" }]);
+        var result = await configurator.SyncAsync(new ClientSyncPlan
+        {
+            Client = ProxyClientKind.Zcode,
+            BaseUrl = "http://127.0.0.1:8317",
+            Upstreams = [upstream]
+        });
+
+        Assert.Equal(1, result.ModelCount);
+        var cliRoot = JsonNode.Parse(await File.ReadAllTextAsync(cliConfig))!.AsObject();
+        var provider = cliRoot["provider"]![CliProxyClientConfigurator.DirectId("or-key|https://openrouter.ai/api/v1")]!.AsObject();
+        // 兼容上游走 chat/completions：apiFormat/npm 换成兼容系，地址带 /v1，模型用真实名
+        Assert.Equal("openai-completions", (string?)provider["apiFormat"]);
+        Assert.Equal("@ai-sdk/openai-compatible", (string?)provider["npm"]);
+        Assert.Equal("https://openrouter.ai/api/v1", (string?)provider["options"]!["baseURL"]);
+        Assert.NotNull(provider["models"]!["org/kimi-k2"]);
+        Assert.Null(provider["models"]!["kimi-k2"]);
+    }
+
+    [Fact]
+    public async Task SyncDsh_GatewayWritesCompletionsGroupForOpenAiCompatible()
+    {
+        Directory.CreateDirectory(_root);
+        var settings = Path.Combine(_root, "settings.yaml");
+        var credentials = Path.Combine(_root, ".credentials.yaml");
+        // block 风格的既有条目（flow 风格 {} 会让 YamlDotNet 把整段输出成单行 flow）
+        await File.WriteAllTextAsync(settings, """
+            llm-pi-ai:
+              providers:
+                legacy-gateway:
+                  displayName: legacy
+                  apiKeyEnv: LEGACY_API_KEY
+                  api: openai-completions
+                  baseURL: http://127.0.0.1:8317/v1
+                  models: []
+            """);
+        await File.WriteAllTextAsync(credentials, "version: 1\nrefs:\n  LEGACY_API_KEY: old\n");
+        var configurator = new CliProxyClientConfigurator(
+            zcodeDesktopConfig: Path.Combine(_root, "missing-zcode.json"),
+            zcodeCliConfig: Path.Combine(_root, "missing-zcode-cli.json"),
+            opencodeConfig: Path.Combine(_root, "missing-opencode.json"),
+            dshSettings: settings,
+            dshCredentials: credentials);
+
+        var result = await configurator.SyncAsync(new ClientSyncPlan
+        {
+            Client = ProxyClientKind.Dsh,
+            ProviderId = "cli-proxy-api",
+            BaseUrl = "http://127.0.0.1:8317",
+            ApiKey = "123456",
+            Models = [new ClientSyncModel(
+                new ProxyModelConfig { Name = "deepseek-v4-flash", Alias = "DeepSeek-V4-Flash" },
+                ProxyProviderKind.OpenAiCompatible)]
+        });
+
+        Assert.Equal(1, result.ModelCount);
+        var content = await File.ReadAllTextAsync(settings);
+        // 兼容组写入 openai-completions 协议组；空模型的 anthropic 槽位消费掉 legacy 条目后按空组移除
+        Assert.Contains("cli-proxy-api-completions:", content);
+        Assert.Contains("api: openai-completions", content);
+        Assert.Contains("baseURL: http://127.0.0.1:8317/v1", content);
+        // 网关模式保留别名作为客户端侧 id
+        Assert.Contains("id: DeepSeek-V4-Flash", content);
+        Assert.DoesNotContain("legacy-gateway", content);
+        // anthropic/responses 组无计划内模型且不预存：不写条目
+        Assert.DoesNotContain("anthropic-messages", content);
+        Assert.DoesNotContain("openai-responses", content);
+    }
+
+    [Fact]
     public async Task SyncZcode_SubsetScopeClearsEmptyProtocolGroup()
     {
         Directory.CreateDirectory(_root);

@@ -54,9 +54,10 @@ public sealed class CliProxyClientConfigurator(
 
     private async Task<ClientSyncResult> SyncZcodeGatewayAsync(ClientSyncPlan plan, CancellationToken cancellationToken)
     {
-        // zcode 只支持 anthropic 与 openai(responses) 两种 API 格式：按上游协议类型拆成两个 provider 条目。
+        // zcode 只支持 anthropic 与 openai 两种 npm 包：Claude 上游走 anthropic，
+        // Codex 与 OpenAI 兼容上游都走 openai（兼容上游由 CPA 完成 Responses→Chat 协议转换）。
         var anthropicModels = plan.Models.Where(model => model.Kind == ProxyProviderKind.Claude).Select(model => model.Config).ToList();
-        var openaiModels = plan.Models.Where(model => model.Kind == ProxyProviderKind.Codex).Select(model => model.Config).ToList();
+        var openaiModels = plan.Models.Where(model => model.Kind != ProxyProviderKind.Claude).Select(model => model.Config).ToList();
 
         string? anthropicId = null;
         string? openaiId = null;
@@ -73,9 +74,9 @@ public sealed class CliProxyClientConfigurator(
             openaiId ??= DetectProviderId(providers, plan.BaseUrl, "openai") ?? $"{plan.ProviderId}-codex";
 
             // 两个协议组都无条件 upsert：组内模型为空时清空既有模型，客户端可见模型始终等于本次同步范围。
-            var anthropicProvider = UpsertZcodeProvider(providers, anthropicId, "anthropic", "CLIProxyAPI", plan.ApiKey, plan.BaseUrl, isCliConfig);
+            var anthropicProvider = UpsertZcodeProvider(providers, anthropicId, "anthropic", "CLIProxyAPI", plan.ApiKey, plan.BaseUrl, isCliConfig, ProxyProviderKind.Claude);
             SyncZcodeModels(anthropicProvider, anthropicModels);
-            var openaiProvider = UpsertZcodeProvider(providers, openaiId, "openai", "CLIProxyAPI Codex", plan.ApiKey, EnsureV1(plan.BaseUrl), isCliConfig);
+            var openaiProvider = UpsertZcodeProvider(providers, openaiId, "openai", "CLIProxyAPI Codex", plan.ApiKey, EnsureV1(plan.BaseUrl), isCliConfig, ProxyProviderKind.Codex);
             SyncZcodeModels(openaiProvider, openaiModels);
             RemoveDanglingDefaultModel(root, RemoveDirectEntries(providers, keep: []));
 
@@ -103,9 +104,9 @@ public sealed class CliProxyClientConfigurator(
                 var kind = upstream.Kind == ProxyProviderKind.Claude ? "anthropic" : "openai";
                 var id = DirectId(upstream.Key);
                 keep.Add(id);
-                // openai SDK 只拼 /responses，需要带 /v1 的地址；anthropic SDK 自拼 /v1/messages，用上游根地址
+                // openai 系 SDK 只拼 /responses，需要带 /v1 的地址；anthropic SDK 自拼 /v1/messages，用上游根地址
                 var baseUrl = upstream.Kind == ProxyProviderKind.Claude ? upstream.BaseUrl.TrimEnd('/') : EnsureV1(upstream.BaseUrl);
-                var provider = UpsertZcodeProvider(providers, id, kind, upstream.DisplayName, upstream.ApiKey, baseUrl, isCliConfig);
+                var provider = UpsertZcodeProvider(providers, id, kind, upstream.DisplayName, upstream.ApiKey, baseUrl, isCliConfig, upstream.Kind);
                 SyncZcodeModels(provider, [.. upstream.Models.Select(WithoutAlias)]);
             }
             RemoveDanglingDefaultModel(root, RemoveGatewayEntries(providers, plan.BaseUrl));
@@ -118,7 +119,8 @@ public sealed class CliProxyClientConfigurator(
     }
 
     private static JsonObject UpsertZcodeProvider(
-        JsonObject providers, string providerId, string kind, string displayName, string apiKey, string baseUrl, bool isCliConfig)
+        JsonObject providers, string providerId, string kind, string displayName, string apiKey, string baseUrl, bool isCliConfig,
+        ProxyProviderKind providerKind = ProxyProviderKind.Codex)
     {
         var provider = GetOrCreateObject(providers, providerId);
         provider["name"] = displayName;
@@ -127,13 +129,24 @@ public sealed class CliProxyClientConfigurator(
         provider["enabled"] = true;
         if (isCliConfig)
         {
-            provider["apiFormat"] = kind == "openai" ? "openai-responses" : "anthropic-messages";
+            // OpenAI 兼容上游走 chat/completions：用 openai-compatible npm 包，其余按协议原生包
+            provider["apiFormat"] = providerKind switch
+            {
+                ProxyProviderKind.Claude => "anthropic-messages",
+                ProxyProviderKind.OpenAiCompatible => "openai-completions",
+                _ => "openai-responses"
+            };
             provider["defaultKind"] = kind;
-            provider["npm"] = kind == "openai" ? "@ai-sdk/openai" : "@ai-sdk/anthropic";
+            provider["npm"] = providerKind switch
+            {
+                ProxyProviderKind.Claude => "@ai-sdk/anthropic",
+                ProxyProviderKind.OpenAiCompatible => "@ai-sdk/openai-compatible",
+                _ => "@ai-sdk/openai"
+            };
         }
         var options = GetOrCreateObject(provider, "options");
         options["apiKey"] = apiKey;
-        // anthropic SDK 在 baseURL 后拼 /v1/messages，用根地址；openai SDK 只拼 /responses，必须自带 /v1
+        // anthropic SDK 在 baseURL 后拼 /v1/messages，用根地址；openai 系 SDK 拼 /responses 或 /chat/completions，必须自带 /v1
         options["baseURL"] = kind == "openai" ? baseUrl.TrimEnd('/') : baseUrl;
         return provider;
     }
@@ -267,7 +280,12 @@ public sealed class CliProxyClientConfigurator(
             var id = DirectId(upstream.Key);
             keep.Add(id);
             var envName = DirectEnvName(id);
-            var api = upstream.Kind == ProxyProviderKind.Claude ? "anthropic-messages" : "openai-responses";
+            var api = upstream.Kind switch
+            {
+                ProxyProviderKind.Claude => "anthropic-messages",
+                ProxyProviderKind.OpenAiCompatible => "openai-completions",
+                _ => "openai-responses"
+            };
             var baseUrl = upstream.Kind == ProxyProviderKind.Claude ? upstream.BaseUrl.TrimEnd('/') : EnsureV1(upstream.BaseUrl);
             WriteDshGroup(providers, id, api, upstream.DisplayName, envName, baseUrl, [.. upstream.Models.Select(WithoutAlias)], removeWhenEmpty: true);
             refs.Children[YamlTree.Key(envName)] = YamlTree.Text(upstream.ApiKey);
@@ -295,19 +313,24 @@ public sealed class CliProxyClientConfigurator(
     {
         // dsh 支持 anthropic-messages / openai-completions / openai-responses：
         // Claude 上游走 anthropic-messages（原生协议，baseURL 为网关根地址），
-        // Codex 上游走 openai-responses（baseURL 带 /v1）。
+        // Codex 上游走 openai-responses（baseURL 带 /v1），
+        // OpenAI 兼容上游走 openai-completions（原生 chat 协议，baseURL 带 /v1）。
         var anthropicModels = plan.Models.Where(model => model.Kind == ProxyProviderKind.Claude).Select(model => model.Config).ToList();
         var responsesModels = plan.Models.Where(model => model.Kind == ProxyProviderKind.Codex).Select(model => model.Config).ToList();
+        var completionsModels = plan.Models.Where(model => model.Kind == ProxyProviderKind.OpenAiCompatible).Select(model => model.Config).ToList();
         var existing = DshGatewayProviders(providers, gatewayBase).ToList();
         // anthropic 组优先复用既有 anthropic-messages 条目；否则升级复用旧 openai-completions 条目的 id
         var anthropicId = existing.FirstOrDefault(entry => entry.Api == "anthropic-messages").Id
             ?? existing.FirstOrDefault(entry => entry.Api == "openai-completions").Id
             ?? plan.ProviderId;
         var responsesId = existing.FirstOrDefault(entry => entry.Api == "openai-responses").Id ?? $"{plan.ProviderId}-responses";
+        var completionsId = existing.FirstOrDefault(entry => entry.Api == "openai-completions" && entry.Id != anthropicId).Id
+            ?? $"{plan.ProviderId}-completions";
         var envName = existing.FirstOrDefault(entry => entry.EnvName is not null).EnvName ?? DefaultDshEnvName;
 
         WriteDshGroup(providers, anthropicId, "anthropic-messages", "CLIProxyAPI", envName, gatewayBase, anthropicModels, removeWhenEmpty: existing.Any(entry => entry.Id == anthropicId));
         WriteDshGroup(providers, responsesId, "openai-responses", "CLIProxyAPI Responses", envName, $"{gatewayBase}/v1", responsesModels, removeWhenEmpty: existing.Any(entry => entry.Id == responsesId));
+        WriteDshGroup(providers, completionsId, "openai-completions", "CLIProxyAPI Completions", envName, $"{gatewayBase}/v1", completionsModels, removeWhenEmpty: existing.Any(entry => entry.Id == completionsId));
         var removed = new List<string>();
         foreach (var (id, _) in providers.Children.ToList())
         {
