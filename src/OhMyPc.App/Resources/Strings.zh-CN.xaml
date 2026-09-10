@@ -148,8 +148,8 @@
     <sys:String x:Key="Proxy_ClientsTab">客户端同步</sys:String>
     <sys:String x:Key="Proxy_KindClaude">Claude（Anthropic 协议）</sys:String>
     <sys:String x:Key="Proxy_KindCodex">Codex（OpenAI Responses 协议）</sys:String>
-    <sys:String x:Key="Proxy_AddClaude">添加 Claude</sys:String>
-    <sys:String x:Key="Proxy_AddCodex">添加 Codex</sys:String>
+    <sys:String x:Key="Proxy_KindOpenAi">OpenAI 兼容（Chat 协议）</sys:String>
+    <sys:String x:Key="Proxy_Add">添加</sys:String>
     <sys:String x:Key="Proxy_ApiKey">API 密钥</sys:String>
     <sys:String x:Key="Proxy_BaseUrl">上游地址</sys:String>
     <sys:String x:Key="Proxy_Priority">优先级（可选）</sys:String>

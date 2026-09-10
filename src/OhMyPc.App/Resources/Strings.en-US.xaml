@@ -148,8 +148,8 @@
     <sys:String x:Key="Proxy_ClientsTab">Client sync</sys:String>
     <sys:String x:Key="Proxy_KindClaude">Claude (Anthropic protocol)</sys:String>
     <sys:String x:Key="Proxy_KindCodex">Codex (OpenAI Responses protocol)</sys:String>
-    <sys:String x:Key="Proxy_AddClaude">Add Claude</sys:String>
-    <sys:String x:Key="Proxy_AddCodex">Add Codex</sys:String>
+    <sys:String x:Key="Proxy_KindOpenAi">OpenAI compatible (Chat protocol)</sys:String>
+    <sys:String x:Key="Proxy_Add">Add</sys:String>
     <sys:String x:Key="Proxy_ApiKey">API key</sys:String>
     <sys:String x:Key="Proxy_BaseUrl">Base URL</sys:String>
     <sys:String x:Key="Proxy_Priority">Priority (optional)</sys:String>

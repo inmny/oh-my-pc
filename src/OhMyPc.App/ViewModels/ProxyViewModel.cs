@@ -81,8 +81,11 @@ public sealed class ProxyViewModel : ViewModelBase
         StopCommand = new AsyncCommand(() => RunProcessActionAsync(_process.StopAsync), () => IsInstalled && !InstallBusy);
         RestartCommand = new AsyncCommand(() => RunProcessActionAsync(_process.RestartAsync), () => IsInstalled && !InstallBusy);
         SaveConfigCommand = new AsyncCommand(SaveConfigAsync, () => IsInstalled);
-        AddClaudeCommand = new AsyncCommand(() => { AddProvider(ProxyProviderKind.Claude); return Task.CompletedTask; });
-        AddCodexCommand = new AsyncCommand(() => { AddProvider(ProxyProviderKind.Codex); return Task.CompletedTask; });
+        AddProviderCommand = new AsyncCommand<ProxyProviderKind>(kind =>
+        {
+            AddProvider(kind);
+            return Task.CompletedTask;
+        });
         SyncClientCommand = new AsyncCommand<ProxyClientKind>(SyncClientAsync);
     }
 
@@ -92,8 +95,7 @@ public sealed class ProxyViewModel : ViewModelBase
     public ICommand StopCommand { get; }
     public ICommand RestartCommand { get; }
     public ICommand SaveConfigCommand { get; }
-    public ICommand AddClaudeCommand { get; }
-    public ICommand AddCodexCommand { get; }
+    public ICommand AddProviderCommand { get; }
     public ICommand SyncClientCommand { get; }
 
     public ObservableCollection<ProxyProviderItemViewModel> Providers { get; } = [];
@@ -521,7 +523,11 @@ public sealed class ProxyViewModel : ViewModelBase
     private async Task SyncClientAsync(ProxyClientKind kind)
     {
         var item = Clients.First(client => client.Client == kind);
-        var selectedProviders = Providers.Where(provider => item.IsProviderSelected(provider.Key)).ToList();
+        // 手工编辑配置可能产生完全相同的条目：按 Key 去重，直连写入时同 id 只落一条
+        var selectedProviders = Providers
+            .Where(provider => item.IsProviderSelected(provider.Key))
+            .DistinctBy(provider => provider.Key)
+            .ToList();
         if (selectedProviders.Count == 0)
         {
             item.LastSyncText = _text["Proxy_SyncEmptyScope"];
@@ -687,7 +693,12 @@ public sealed class ProxyProviderItemViewModel(ProxyProviderConfig config, Local
 
     public bool HasSelectedModel => SelectedModel is not null;
 
-    public string KindText => Kind == ProxyProviderKind.Claude ? text["Proxy_KindClaude"] : text["Proxy_KindCodex"];
+    public string KindText => Kind switch
+    {
+        ProxyProviderKind.Claude => text["Proxy_KindClaude"],
+        ProxyProviderKind.OpenAiCompatible => text["Proxy_KindOpenAi"],
+        _ => text["Proxy_KindCodex"]
+    };
 
     /// <summary>卡片标题：优先显示用户填写的名称，否则显示类型。</summary>
     public string TitleText => string.IsNullOrWhiteSpace(Remark) ? KindText : Remark;
@@ -711,7 +722,8 @@ public sealed class ProxyProviderItemViewModel(ProxyProviderConfig config, Local
     public void RaiseModelCount() => Raise(nameof(ModelCountText));
 
     /// <summary>同步范围的稳定标识，与 CliProxyConfigStore 复用条目的判定键（api-key + base-url）一致。</summary>
-    public string Key => $"{ApiKey}|{BaseUrl}";
+    /// <summary>同步范围的稳定标识：协议 + 密钥 + 地址。不同协议可共用同一中转站与密钥，必须区分。</summary>
+    public string Key => $"{Kind}:{ApiKey}|{BaseUrl}";
 
     public string SyncDisplay => $"{TitleText} · {ModelCountText}";
 
@@ -811,9 +823,12 @@ public sealed class ProxyClientSyncItemViewModel(ProxyClientKind client, Localiz
 
     public void UpdateProviders(IReadOnlyList<(string Key, string Display)> picks)
     {
-        var previous = _providerPicks.ToDictionary(pick => pick.Key, pick => pick.IsChecked);
+        // 手工编辑 config.yaml 可能出现完全相同的条目：按 Key 去重，防止字典重复键崩溃
+        var previous = _providerPicks
+            .GroupBy(pick => pick.Key)
+            .ToDictionary(group => group.Key, group => group.First().IsChecked);
         _providerPicks.Clear();
-        foreach (var (key, display) in picks)
+        foreach (var (key, display) in picks.GroupBy(pick => pick.Key).Select(group => group.First()))
         {
             _providerPicks.Add(new ProxyProviderPickItemViewModel(key, display)
             {

@@ -274,6 +274,12 @@ public partial class MainWindow : Window
         if (answer == MessageBoxResult.Yes) ViewModel.Proxy.RemoveSelectedProvider();
     }
 
+    private void AddProviderKind_Click(object sender, RoutedEventArgs e)
+    {
+        // 添加动作由按钮的 AddProviderCommand 完成，这里只负责收起下拉菜单
+        AddProviderToggle.IsChecked = false;
+    }
+
     private void AddProxyModel_Click(object sender, RoutedEventArgs e)
     {
         if (ViewModel.Proxy.SelectedProvider is null) return;

@@ -1259,11 +1259,47 @@
                                         BorderThickness="0,1,0,0"
                                         Margin="0,10,0,0"
                                         Padding="0,10,0,0">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Button Content="{DynamicResource Proxy_AddClaude}" Command="{Binding Proxy.AddClaudeCommand}" Margin="0,0,8,0" />
-                                        <Button Content="{DynamicResource Proxy_AddCodex}" Command="{Binding Proxy.AddCodexCommand}" Margin="0,0,8,0" />
-                                        <Button Content="{DynamicResource Common_Delete}" Click="DeleteProxyProvider_Click" Style="{StaticResource DangerButton}" />
-                                    </StackPanel>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="8" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <ToggleButton x:Name="AddProviderToggle"
+                                                      Content="{DynamicResource Proxy_Add}" />
+                                        <Popup IsOpen="{Binding IsChecked, ElementName=AddProviderToggle, Mode=TwoWay}"
+                                               PlacementTarget="{Binding ElementName=AddProviderToggle}"
+                                               Placement="Top"
+                                               StaysOpen="False"
+                                               AllowsTransparency="True"
+                                               PopupAnimation="Fade">
+                                            <Border Background="{StaticResource PanelRaisedBrush}"
+                                                    BorderBrush="{StaticResource BorderBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="6"
+                                                    Padding="4"
+                                                    Margin="8">
+                                                <StackPanel MinWidth="220">
+                                                    <Button Content="{DynamicResource Proxy_KindClaude}"
+                                                            Command="{Binding DataContext.Proxy.AddProviderCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{x:Static domain:ProxyProviderKind.Claude}"
+                                                            Click="AddProviderKind_Click"
+                                                            HorizontalContentAlignment="Left" />
+                                                    <Button Content="{DynamicResource Proxy_KindCodex}"
+                                                            Command="{Binding DataContext.Proxy.AddProviderCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{x:Static domain:ProxyProviderKind.Codex}"
+                                                            Click="AddProviderKind_Click"
+                                                            HorizontalContentAlignment="Left" />
+                                                    <Button Content="{DynamicResource Proxy_KindOpenAi}"
+                                                            Command="{Binding DataContext.Proxy.AddProviderCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{x:Static domain:ProxyProviderKind.OpenAiCompatible}"
+                                                            Click="AddProviderKind_Click"
+                                                            HorizontalContentAlignment="Left" />
+                                                </StackPanel>
+                                            </Border>
+                                        </Popup>
+                                        <Button Grid.Column="2" Content="{DynamicResource Common_Delete}" Click="DeleteProxyProvider_Click" Style="{StaticResource DangerButton}" />
+                                    </Grid>
                                 </Border>
                                 <ListBox ItemsSource="{Binding Proxy.Providers}"
                                          SelectedItem="{Binding Proxy.SelectedProvider, Mode=TwoWay}"
