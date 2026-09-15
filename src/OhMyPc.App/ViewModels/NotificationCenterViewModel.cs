@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
 using OhMyPc.App.Services;
 using OhMyPc.Core;
@@ -33,7 +34,7 @@ public sealed class NotificationHistoryItemViewModel(NotificationRecord record, 
     public string ChannelsText => text.GetEnum(Record.Channels);
 }
 
-public sealed class NotificationCenterViewModel : ViewModelBase, IDisposable
+public sealed partial class NotificationCenterViewModel : ObservableObject, IDisposable
 {
     private readonly IAppStore _store;
     private readonly NotificationCenterService _notifications;
@@ -47,15 +48,20 @@ public sealed class NotificationCenterViewModel : ViewModelBase, IDisposable
     private long _queryVersion;
     private bool _loaded;
     private int _retentionDays = NotificationRetentionPolicy.DefaultDays;
-    private bool _isHistorySelected = true;
-    private bool _isLoading;
-    private string _errorText = "";
     private DateTimeOffset? _clearedThrough;
+    private bool _isHistorySelected = true;
     private NotificationHistoryItemViewModel? _selectedNotification;
     private AutomationRuleDefinition? _selectedRule;
-    private NotificationSourceOption? _selectedSource;
-    private NotificationSeverityOption? _selectedSeverity;
-    private NotificationPeriodOption? _selectedPeriod;
+
+    [ObservableProperty] private bool _isLoading;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasError))]
+    private string _errorText = "";
+
+    [ObservableProperty] private NotificationSourceOption? _selectedSource;
+    [ObservableProperty] private NotificationSeverityOption? _selectedSeverity;
+    [ObservableProperty] private NotificationPeriodOption? _selectedPeriod;
 
     public NotificationCenterViewModel(
         IAppStore store,
@@ -84,8 +90,8 @@ public sealed class NotificationCenterViewModel : ViewModelBase, IDisposable
         get => _isHistorySelected;
         set
         {
-            if (!value || !Set(ref _isHistorySelected, true)) return;
-            Raise(nameof(IsRulesSelected));
+            if (!value || !SetProperty(ref _isHistorySelected, true)) return;
+            OnPropertyChanged(nameof(IsRulesSelected));
         }
     }
 
@@ -94,13 +100,11 @@ public sealed class NotificationCenterViewModel : ViewModelBase, IDisposable
         get => !_isHistorySelected;
         set
         {
-            if (!value || !Set(ref _isHistorySelected, false, nameof(IsHistorySelected))) return;
-            Raise();
+            if (!value || !SetProperty(ref _isHistorySelected, false, nameof(IsHistorySelected))) return;
+            OnPropertyChanged();
         }
     }
 
-    public bool IsLoading { get => _isLoading; private set => Set(ref _isLoading, value); }
-    public string ErrorText { get => _errorText; private set { if (Set(ref _errorText, value)) Raise(nameof(HasError)); } }
     public bool HasError => !string.IsNullOrEmpty(ErrorText);
     public bool IsHistoryEmpty => !IsLoading && Notifications.Count == 0;
     public bool HasSelectedNotification => SelectedNotification is not null;
@@ -112,8 +116,8 @@ public sealed class NotificationCenterViewModel : ViewModelBase, IDisposable
         get => _selectedNotification;
         set
         {
-            if (!Set(ref _selectedNotification, value)) return;
-            Raise(nameof(HasSelectedNotification));
+            if (!SetProperty(ref _selectedNotification, value)) return;
+            OnPropertyChanged(nameof(HasSelectedNotification));
         }
     }
 
@@ -122,14 +126,10 @@ public sealed class NotificationCenterViewModel : ViewModelBase, IDisposable
         get => _selectedRule;
         set
         {
-            if (!Set(ref _selectedRule, value)) return;
-            Raise(nameof(HasSelectedRule));
+            if (!SetProperty(ref _selectedRule, value)) return;
+            OnPropertyChanged(nameof(HasSelectedRule));
         }
     }
-
-    public NotificationSourceOption? SelectedSource { get => _selectedSource; set => Set(ref _selectedSource, value); }
-    public NotificationSeverityOption? SelectedSeverity { get => _selectedSeverity; set => Set(ref _selectedSeverity, value); }
-    public NotificationPeriodOption? SelectedPeriod { get => _selectedPeriod; set => Set(ref _selectedPeriod, value); }
 
     public async Task LoadAsync(int retentionDays)
     {
@@ -294,7 +294,7 @@ public sealed class NotificationCenterViewModel : ViewModelBase, IDisposable
         BuildFilterOptions();
         ReplaceHistory(records);
         Replace(Rules, rules);
-        Raise(nameof(HistoryCountText));
+        OnPropertyChanged(nameof(HistoryCountText));
     }
 
     private async Task LoadRulesAsync() => Replace(Rules, await _store.ListRulesAsync());
@@ -351,7 +351,6 @@ public sealed class NotificationCenterViewModel : ViewModelBase, IDisposable
     {
         if (_clearedThrough is not null && record.CreatedAt <= _clearedThrough.Value) return;
         if (_hiddenIds.Contains(record.Id)) return;
-
         _liveRecords[record.Id] = record;
         if (_liveRecords.Count > NotificationHistoryQuery.MaximumLimit * 2)
         {
@@ -440,8 +439,8 @@ public sealed class NotificationCenterViewModel : ViewModelBase, IDisposable
 
     private void RaiseHistoryState()
     {
-        Raise(nameof(IsHistoryEmpty));
-        Raise(nameof(HistoryCountText));
+        OnPropertyChanged(nameof(IsHistoryEmpty));
+        OnPropertyChanged(nameof(HistoryCountText));
     }
 
     private static void Replace<T>(ObservableCollection<T> target, IEnumerable<T> source)

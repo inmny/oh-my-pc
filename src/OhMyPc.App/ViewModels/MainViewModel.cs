@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
-using System.Windows.Input;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using LiveChartsCore;
 using LiveChartsCore.Defaults;
 using LiveChartsCore.Measure;
@@ -18,7 +19,7 @@ using SkiaSharp;
 
 namespace OhMyPc.App.ViewModels;
 
-public sealed class MainViewModel : ViewModelBase
+public sealed partial class MainViewModel : ObservableObject
 {
     private const int ContributionWeekCount = 53;
     private const double ContributionCellStride = 16;
@@ -32,15 +33,7 @@ public sealed class MainViewModel : ViewModelBase
     private readonly UpdateCheckService _updates;
     private readonly LocalizationService _text;
     private readonly ILogger<MainViewModel> _logger;
-    private bool _isBusy;
-    private string _statusText;
-    private string _lastUpdated;
-    private long _todayTokens;
-    private decimal _todayCost;
-    private DataSourceDefinition? _selectedSource;
-    private AppSettings _settings = new();
     private AppSettings _savedSettings = new();
-    private bool _canEditSettings = true;
     private readonly Dictionary<DateOnly, UsageTrendPoint> _usageByDate = [];
     private readonly Dictionary<DateOnly, ContributionDayViewModel> _contributionByDate = [];
     private readonly Dictionary<DateOnly, int> _weekIndexes = [];
@@ -57,12 +50,38 @@ public sealed class MainViewModel : ViewModelBase
     private DateOnly _usageEnd;
     private bool _usageInitialized;
     private string? _localizedChartLanguage;
-    private string _contributionRangeText = "";
-    private string _localApiStatusText = "";
-    private string _updateBannerText = "";
-    private bool _updateBusy;
     private UsageBreakdownGroup _breakdownGroup = UsageBreakdownGroup.Tool;
     private UsageBreakdownPeriod _breakdownPeriod = UsageBreakdownPeriod.Today;
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(RefreshCommand))]
+    private bool _isBusy;
+
+    [ObservableProperty] private bool _canEditSettings = true;
+    [ObservableProperty] private string _statusText = "";
+    [ObservableProperty] private string _lastUpdated = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TodayTokensText))]
+    private long _todayTokens;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TodayCostText))]
+    private decimal _todayCost;
+
+    [ObservableProperty] private DataSourceDefinition? _selectedSource;
+    [ObservableProperty] private AppSettings _settings = new();
+    [ObservableProperty] private string _contributionRangeText = "";
+    [ObservableProperty] private string _localApiStatusText = "";
+
+    /// <summary>顶部更新横幅文案：空串表示无更新；下载中显示进度，失败显示原因。</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasUpdateBanner))]
+    private string _updateBannerText = "";
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(UpdateNowCommand))]
+    private bool _updateBusy;
 
     public MainViewModel(
         IAppStore store,
@@ -87,7 +106,8 @@ public sealed class MainViewModel : ViewModelBase
         Vpn = vpn;
         NotificationCenter = notificationCenter;
         Proxy = proxy;
-        Proxy.PersistScopeAsync = SaveProxyClientScopeAsync;
+        // 同步范围由 ProxyViewModel 落盘，这里把结果同步进内存设置，防止设置页保存时覆盖回旧值
+        Proxy.ScopePersisted += (kind, scope) => Settings.ClientSyncScopes[kind.ToString()] = scope;
         _localApi = localApi;
         _startup = startup;
         _text = text;
@@ -126,10 +146,6 @@ public sealed class MainViewModel : ViewModelBase
         _localUsage.Refreshed += BackgroundUsageRefreshCompleted;
         _quotas.Refreshed += BackgroundQuotaRefreshCompleted;
         _inputStatus.Refreshed += BackgroundInputStatusRefreshCompleted;
-        RefreshCommand = new AsyncCommand(RefreshAllAsync, () => !IsBusy);
-        UpdateNowCommand = new AsyncCommand(UpdateNowAsync, () => !UpdateBusy);
-        SelectBreakdownGroupCommand = new AsyncCommand<UsageBreakdownGroup>(SelectBreakdownGroupAsync);
-        SelectBreakdownPeriodCommand = new AsyncCommand<UsageBreakdownPeriod>(SelectBreakdownPeriodAsync);
     }
 
     private static void InvokeOnUi(Action action) =>
@@ -145,64 +161,13 @@ public sealed class MainViewModel : ViewModelBase
     public NotificationCenterViewModel NotificationCenter { get; }
     public ProxyViewModel Proxy { get; }
 
-    public ICommand RefreshCommand { get; }
-    public ICommand UpdateNowCommand { get; }
-    public ICommand SelectBreakdownGroupCommand { get; }
-    public ICommand SelectBreakdownPeriodCommand { get; }
-
-    /// <summary>顶部更新横幅文案：空串表示无更新；下载中显示进度，失败显示原因。</summary>
-    public string UpdateBannerText
-    {
-        get => _updateBannerText;
-        private set
-        {
-            if (Set(ref _updateBannerText, value)) Raise(nameof(HasUpdateBanner));
-        }
-    }
-
     public bool HasUpdateBanner => UpdateBannerText.Length > 0;
-
-    public bool UpdateBusy
-    {
-        get => _updateBusy;
-        private set
-        {
-            if (Set(ref _updateBusy, value)) ((AsyncCommand)UpdateNowCommand).Refresh();
-        }
-    }
 
     public string AppVersionText { get; } = $"v{typeof(MainViewModel).Assembly.GetName().Version}";
 
-    private async Task UpdateNowAsync()
-    {
-        if (_updateBusy) return;
-        UpdateBusy = true;
-        try
-        {
-            await _updates.DownloadAndApplyAsync();
-        }
-        catch (Exception exception)
-        {
-            _logger.LogError(exception, "应用更新失败");
-            UpdateBannerText = _text.Format("Update_BannerFailed", exception.Message);
-        }
-        finally
-        {
-            UpdateBusy = false;
-        }
-    }
-    public bool IsBusy { get => _isBusy; private set { if (Set(ref _isBusy, value)) ((AsyncCommand)RefreshCommand).Refresh(); } }
-    public bool CanEditSettings { get => _canEditSettings; private set => Set(ref _canEditSettings, value); }
-    public string StatusText { get => _statusText; private set => Set(ref _statusText, value); }
-    public string LastUpdated { get => _lastUpdated; private set => Set(ref _lastUpdated, value); }
-    public long TodayTokens { get => _todayTokens; private set { if (Set(ref _todayTokens, value)) Raise(nameof(TodayTokensText)); } }
-    public decimal TodayCost { get => _todayCost; private set { if (Set(ref _todayCost, value)) Raise(nameof(TodayCostText)); } }
     public string TodayTokensText => TodayTokens.ToString("N0");
     public string TodayCostText => $"${TodayCost:0.00}";
-    public DataSourceDefinition? SelectedSource { get => _selectedSource; set => Set(ref _selectedSource, value); }
-    public AppSettings Settings { get => _settings; private set => Set(ref _settings, value); }
-    public string ContributionRangeText { get => _contributionRangeText; private set => Set(ref _contributionRangeText, value); }
-    public string LocalApiStatusText { get => _localApiStatusText; private set => Set(ref _localApiStatusText, value); }
+
     public bool IsBreakdownByTool => _breakdownGroup == UsageBreakdownGroup.Tool;
     public bool IsBreakdownByModel => _breakdownGroup == UsageBreakdownGroup.Model;
     public bool IsBreakdownToday => _breakdownPeriod == UsageBreakdownPeriod.Today;
@@ -216,7 +181,7 @@ public sealed class MainViewModel : ViewModelBase
     public Axis[] WeeklyMessageXAxes { get; }
     public Axis[] WeeklyMessageYAxes { get; }
     public Margin WeeklyChartDrawMargin { get; } = new(82, Margin.Auto, 28, Margin.Auto);
-    /// <summary>两张图表的自定义悬浮框实例（XAML 直接绑定到图表 Tooltip 属性）。</summary>
+    /// <summary>两张图表的自定义悬浮框实例（由总览视图挂到图表控件上）。</summary>
     public Controls.WeeklyUsageTooltip CandleTooltip => _candleTooltip;
     public Controls.WeeklyUsageTooltip MessageTooltip => _messageTooltip;
 
@@ -236,7 +201,8 @@ public sealed class MainViewModel : ViewModelBase
         LastUpdated = _text.Format("Status_Updated", DateTime.Now);
     }
 
-    public async Task RefreshAllAsync()
+    [RelayCommand]
+    public async Task RefreshAsync()
     {
         if (IsBusy) return;
         IsBusy = true;
@@ -255,6 +221,46 @@ public sealed class MainViewModel : ViewModelBase
         {
             IsBusy = false;
         }
+    }
+
+    [RelayCommand]
+    private async Task UpdateNowAsync()
+    {
+        UpdateBusy = true;
+        try
+        {
+            await _updates.DownloadAndApplyAsync();
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "应用更新失败");
+            UpdateBannerText = _text.Format("Update_BannerFailed", exception.Message);
+        }
+        finally
+        {
+            UpdateBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task SelectBreakdownGroupAsync(UsageBreakdownGroup group)
+    {
+        if (_breakdownGroup == group) return;
+        _breakdownGroup = group;
+        OnPropertyChanged(nameof(IsBreakdownByTool));
+        OnPropertyChanged(nameof(IsBreakdownByModel));
+        await RefreshUsageBreakdownAsync();
+    }
+
+    [RelayCommand]
+    private async Task SelectBreakdownPeriodAsync(UsageBreakdownPeriod period)
+    {
+        if (_breakdownPeriod == period) return;
+        _breakdownPeriod = period;
+        OnPropertyChanged(nameof(IsBreakdownToday));
+        OnPropertyChanged(nameof(IsBreakdownMonth));
+        OnPropertyChanged(nameof(IsBreakdownAll));
+        await RefreshUsageBreakdownAsync();
     }
 
     public async Task<int> ImportEnvironmentAsync()
@@ -395,22 +401,11 @@ public sealed class MainViewModel : ViewModelBase
         UpdateCheckEnabled = settings.UpdateCheckEnabled,
         ClientSyncScopes = settings.ClientSyncScopes.ToDictionary(
             pair => pair.Key,
-            pair => CloneScope(pair.Value))
-    };
-
-    /// <summary>同步完成后保存客户端同步范围。基于磁盘上的最新设置写入，避免把设置页未保存的编辑一并落盘。</summary>
-    private async Task SaveProxyClientScopeAsync(ProxyClientKind kind, ProxyClientSyncScope scope)
-    {
-        var stored = await _store.GetSettingsAsync();
-        stored.ClientSyncScopes[kind.ToString()] = CloneScope(scope);
-        await _store.SaveSettingsAsync(stored);
-        Settings.ClientSyncScopes[kind.ToString()] = CloneScope(scope);
-    }
-
-    private static ProxyClientSyncScope CloneScope(ProxyClientSyncScope scope) => new()
-    {
-        AllProviders = scope.AllProviders,
-        ProviderKeys = [.. scope.ProviderKeys]
+            pair => new ProxyClientSyncScope
+            {
+                AllProviders = pair.Value.AllProviders,
+                ProviderKeys = [.. pair.Value.ProviderKeys]
+            })
     };
 
     private void RefreshLocalApiStatus()
@@ -475,7 +470,7 @@ public sealed class MainViewModel : ViewModelBase
             var week = (date.DayNumber - _usageStart.DayNumber) / 7;
             var day = ((int)date.DayOfWeek + 6) % 7;
             var cell = new ContributionDayViewModel(date, week * ContributionCellStride, day * ContributionCellStride);
-            cell.Update(_usageByDate[date], PreviousDayTokens(date), _text);
+            cell.Update(_usageByDate[date], PreviousDayTokens(date));
             ContributionDays.Add(cell);
             _contributionByDate[date] = cell;
         }
@@ -515,10 +510,10 @@ public sealed class MainViewModel : ViewModelBase
         {
             var point = _usageByDate[date];
             // 当日变化会同时影响次日（环比）的展示，一并刷新
-            _contributionByDate[date].Update(point, PreviousDayTokens(date), _text);
+            _contributionByDate[date].Update(point, PreviousDayTokens(date));
             if (_contributionByDate.TryGetValue(date.AddDays(1), out var nextCell))
             {
-                nextCell.Update(_usageByDate[date.AddDays(1)], point.TotalTokens, _text);
+                nextCell.Update(_usageByDate[date.AddDays(1)], point.TotalTokens);
             }
         }
 
@@ -599,25 +594,6 @@ public sealed class MainViewModel : ViewModelBase
         var today = _usageByDate[_usageEnd];
         TodayTokens = today.TotalTokens;
         TodayCost = today.CostUsd;
-    }
-
-    private async Task SelectBreakdownGroupAsync(UsageBreakdownGroup group)
-    {
-        if (_breakdownGroup == group) return;
-        _breakdownGroup = group;
-        Raise(nameof(IsBreakdownByTool));
-        Raise(nameof(IsBreakdownByModel));
-        await RefreshUsageBreakdownAsync();
-    }
-
-    private async Task SelectBreakdownPeriodAsync(UsageBreakdownPeriod period)
-    {
-        if (_breakdownPeriod == period) return;
-        _breakdownPeriod = period;
-        Raise(nameof(IsBreakdownToday));
-        Raise(nameof(IsBreakdownMonth));
-        Raise(nameof(IsBreakdownAll));
-        await RefreshUsageBreakdownAsync();
     }
 
     private async Task RefreshUsageBreakdownAsync()

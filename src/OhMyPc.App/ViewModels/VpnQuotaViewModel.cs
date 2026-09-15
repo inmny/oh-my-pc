@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
-using System.Windows.Input;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using LiveChartsCore;
 using LiveChartsCore.Defaults;
 using LiveChartsCore.Measure;
@@ -13,7 +14,7 @@ using SkiaSharp;
 
 namespace OhMyPc.App.ViewModels;
 
-public sealed class VpnQuotaViewModel : ViewModelBase
+public sealed partial class VpnQuotaViewModel : ObservableObject
 {
     private const double BytesPerGibibyte = 1024d * 1024d * 1024d;
     private const int HistoryDayCount = 30;
@@ -56,10 +57,8 @@ public sealed class VpnQuotaViewModel : ViewModelBase
         DailyUsageXAxes = [CreateDateAxis(_dailyUsageLabels)];
         DailyUsageYAxes = [CreateValueAxis()];
         _refreshService.Refreshed += BackgroundRefreshCompleted;
-        RefreshCommand = new AsyncCommand(RefreshAsync, () => HasAccount && !IsBusy);
     }
 
-    public ICommand RefreshCommand { get; }
     public ISeries[] DailyUsageSeries { get; }
     public Axis[] DailyUsageXAxes { get; }
     public Axis[] DailyUsageYAxes { get; }
@@ -67,15 +66,17 @@ public sealed class VpnQuotaViewModel : ViewModelBase
     public bool HasAccount => _account is not null;
     public bool IsEmpty => !HasAccount;
     public bool HasError => !string.IsNullOrWhiteSpace(_account?.LastError);
+
     public bool IsBusy
     {
         get => _isBusy;
         private set
         {
-            if (!Set(ref _isBusy, value)) return;
-            ((AsyncCommand)RefreshCommand).Refresh();
+            if (!SetProperty(ref _isBusy, value)) return;
+            RefreshCommand.NotifyCanExecuteChanged();
         }
     }
+
     public string Email => _account?.Email ?? "";
     public string PlanName => string.IsNullOrWhiteSpace(_account?.PlanName) ? _text["Vpn_NoPlan"] : _account.PlanName;
     public string StatusText => _account is null ? "" : _text.GetEnum(_account.Status);
@@ -164,6 +165,7 @@ public sealed class VpnQuotaViewModel : ViewModelBase
         }
     }
 
+    [RelayCommand(CanExecute = nameof(CanRefresh))]
     public async Task RefreshAsync()
     {
         if (!HasAccount || IsBusy) return;
@@ -178,6 +180,8 @@ public sealed class VpnQuotaViewModel : ViewModelBase
             IsBusy = false;
         }
     }
+
+    private bool CanRefresh() => HasAccount && !IsBusy;
 
     public async Task RemoveAsync()
     {
@@ -266,28 +270,28 @@ public sealed class VpnQuotaViewModel : ViewModelBase
 
     private void RaiseAll()
     {
-        Raise(nameof(HasAccount));
-        Raise(nameof(IsEmpty));
-        Raise(nameof(HasError));
-        Raise(nameof(Email));
-        Raise(nameof(PlanName));
-        Raise(nameof(StatusText));
-        Raise(nameof(RemainingText));
-        Raise(nameof(RemainingPercentText));
-        Raise(nameof(RemainingPercent));
-        Raise(nameof(TotalText));
-        Raise(nameof(UsedText));
-        Raise(nameof(UploadedText));
-        Raise(nameof(DownloadedText));
-        Raise(nameof(ExpiresText));
-        Raise(nameof(DaysRemainingText));
-        Raise(nameof(ResetDayText));
-        Raise(nameof(LastUpdatedText));
-        Raise(nameof(ErrorText));
-        Raise(nameof(HasHistory));
-        Raise(nameof(HistoryRangeText));
-        Raise(nameof(AverageDailyText));
-        Raise(nameof(EstimatedExhaustionText));
-        ((AsyncCommand)RefreshCommand).Refresh();
+        OnPropertyChanged(nameof(HasAccount));
+        OnPropertyChanged(nameof(IsEmpty));
+        OnPropertyChanged(nameof(HasError));
+        OnPropertyChanged(nameof(Email));
+        OnPropertyChanged(nameof(PlanName));
+        OnPropertyChanged(nameof(StatusText));
+        OnPropertyChanged(nameof(RemainingText));
+        OnPropertyChanged(nameof(RemainingPercentText));
+        OnPropertyChanged(nameof(RemainingPercent));
+        OnPropertyChanged(nameof(TotalText));
+        OnPropertyChanged(nameof(UsedText));
+        OnPropertyChanged(nameof(UploadedText));
+        OnPropertyChanged(nameof(DownloadedText));
+        OnPropertyChanged(nameof(ExpiresText));
+        OnPropertyChanged(nameof(DaysRemainingText));
+        OnPropertyChanged(nameof(ResetDayText));
+        OnPropertyChanged(nameof(LastUpdatedText));
+        OnPropertyChanged(nameof(ErrorText));
+        OnPropertyChanged(nameof(HasHistory));
+        OnPropertyChanged(nameof(HistoryRangeText));
+        OnPropertyChanged(nameof(AverageDailyText));
+        OnPropertyChanged(nameof(EstimatedExhaustionText));
+        RefreshCommand.NotifyCanExecuteChanged();
     }
 }

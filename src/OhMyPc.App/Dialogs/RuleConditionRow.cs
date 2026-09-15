@@ -1,14 +1,13 @@
-using System.ComponentModel;
 using System.Globalization;
-using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
+using CommunityToolkit.Mvvm.ComponentModel;
 using OhMyPc.App.Services;
 using OhMyPc.Core;
 using OhMyPc.Core.Domain;
 
 namespace OhMyPc.App.Dialogs;
 
-public sealed class RuleConditionRow : INotifyPropertyChanged
+public sealed class RuleConditionRow : ObservableObject
 {
     private readonly IAutomationCatalog _catalog;
     private readonly LocalizationService _text;
@@ -34,10 +33,9 @@ public sealed class RuleConditionRow : INotifyPropertyChanged
         _valueText = condition?.Value is null ? "" : FormatValue(condition);
     }
 
-    public event PropertyChangedEventHandler? PropertyChanged;
     public IReadOnlyList<RuleFieldChoice> Fields { get; }
     public IReadOnlyList<AutomationConditionOperator> Operators { get; private set; }
-    public IReadOnlyList<AutomationValueOption> Options { get => _options; private set => Set(ref _options, value); }
+    public IReadOnlyList<AutomationValueOption> Options { get => _options; private set => SetProperty(ref _options, value); }
 
     public RuleFieldChoice SelectedField
     {
@@ -50,25 +48,25 @@ public sealed class RuleConditionRow : INotifyPropertyChanged
             _selectedOperator = Operators[0];
             _valueText = "";
             Options = [];
-            Raise();
-            Raise(nameof(Operators));
-            Raise(nameof(SelectedOperator));
-            Raise(nameof(ValueText));
-            Raise(nameof(UsesOptionPicker));
-            Raise(nameof(UsesTextInput));
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(Operators));
+            OnPropertyChanged(nameof(SelectedOperator));
+            OnPropertyChanged(nameof(ValueText));
+            OnPropertyChanged(nameof(UsesOptionPicker));
+            OnPropertyChanged(nameof(UsesTextInput));
         }
     }
 
     public AutomationConditionOperator SelectedOperator
     {
         get => _selectedOperator;
-        set => Set(ref _selectedOperator, value);
+        set => SetProperty(ref _selectedOperator, value);
     }
 
     public string ValueText
     {
         get => _valueText;
-        set => Set(ref _valueText, value);
+        set => SetProperty(ref _valueText, value);
     }
 
     public bool UsesOptionPicker =>
@@ -132,17 +130,6 @@ public sealed class RuleConditionRow : INotifyPropertyChanged
         AutomationValueKind.Boolean => condition.Value!.GetValue<bool>().ToString().ToLowerInvariant(),
         _ => ""
     };
-
-    private bool Set<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
-    {
-        if (EqualityComparer<T>.Default.Equals(field, value)) return false;
-        field = value;
-        Raise(propertyName);
-        return true;
-    }
-
-    private void Raise([CallerMemberName] string? propertyName = null) =>
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 }
 
 public sealed record RuleFieldChoice(AutomationFieldDescriptor Descriptor, string DisplayName);

@@ -1,3 +1,4 @@
+using CommunityToolkit.Mvvm.ComponentModel;
 using OhMyPc.Core.Domain;
 using OhMyPc.App.Services;
 using OhMyPc.Infrastructure.InputStatus;
@@ -95,7 +96,7 @@ public sealed record ModelStatusSampleViewModel(bool? Available);
 
 public sealed class AddQuotaSourceCardViewModel : QuotaCardItemViewModel;
 
-public sealed class ContributionDayViewModel(DateOnly date, double left, double top) : ViewModelBase
+public sealed class ContributionDayViewModel(DateOnly date, double left, double top) : ObservableObject
 {
     private long _tokens;
     private long _messages;
@@ -106,9 +107,9 @@ public sealed class ContributionDayViewModel(DateOnly date, double left, double 
     public DateOnly Date { get; } = date;
     public double Left { get; } = left;
     public double Top { get; } = top;
-    public long Tokens { get => _tokens; private set => Set(ref _tokens, value); }
-    public long Messages { get => _messages; private set => Set(ref _messages, value); }
-    public int Level { get => _level; private set => Set(ref _level, value); }
+    public long Tokens { get => _tokens; private set => SetProperty(ref _tokens, value); }
+    public long Messages { get => _messages; private set => SetProperty(ref _messages, value); }
+    public int Level { get => _level; private set => SetProperty(ref _level, value); }
 
     public string TokensText => Controls.WeeklyUsageTooltip.Tokens(Tokens);
     public string CostText => Cost.ToString("$#,##0.00");
@@ -136,18 +137,18 @@ public sealed class ContributionDayViewModel(DateOnly date, double left, double 
         }
     }
 
-    public void Update(UsageTrendPoint point, long previousTokens, LocalizationService text)
+    public void Update(UsageTrendPoint point, long previousTokens)
     {
         Tokens = point.TotalTokens;
         Messages = point.MessageCount;
         _cost = point.CostUsd;
         _previousTokens = previousTokens;
-        Raise(nameof(CostText));
-        Raise(nameof(TokensText));
-        Raise(nameof(MessagesText));
-        Raise(nameof(DateText));
-        Raise(nameof(TrendText));
-        Raise(nameof(TrendArrow));
+        OnPropertyChanged(nameof(CostText));
+        OnPropertyChanged(nameof(TokensText));
+        OnPropertyChanged(nameof(MessagesText));
+        OnPropertyChanged(nameof(DateText));
+        OnPropertyChanged(nameof(TrendText));
+        OnPropertyChanged(nameof(TrendArrow));
     }
 
     public void SetLevel(int level) => Level = level;
@@ -155,7 +156,7 @@ public sealed class ContributionDayViewModel(DateOnly date, double left, double 
 
 public sealed record ContributionMonthLabel(string Text, double Left);
 
-public sealed class UsageBreakdownRowViewModel(UsageBreakdownPoint point, double relativePercent) : ViewModelBase
+public sealed class UsageBreakdownRowViewModel(UsageBreakdownPoint point, double relativePercent) : ObservableObject
 {
     public string Name => point.Name;
     public long TotalTokens => point.TotalTokens;
@@ -173,11 +174,11 @@ public sealed class UsageBreakdownRowViewModel(UsageBreakdownPoint point, double
 
     public void RefreshText()
     {
-        Raise(nameof(TotalTokensText));
-        Raise(nameof(InputTokensText));
-        Raise(nameof(OutputTokensText));
-        Raise(nameof(CacheHitTokensText));
-        Raise(nameof(CacheHitPercentText));
-        Raise(nameof(CostText));
+        OnPropertyChanged(nameof(TotalTokensText));
+        OnPropertyChanged(nameof(InputTokensText));
+        OnPropertyChanged(nameof(OutputTokensText));
+        OnPropertyChanged(nameof(CacheHitTokensText));
+        OnPropertyChanged(nameof(CacheHitPercentText));
+        OnPropertyChanged(nameof(CostText));
     }
 }

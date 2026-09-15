@@ -26,7 +26,7 @@ public sealed class TrayService(
         _openItem = new Forms.ToolStripMenuItem();
         _openItem.Click += (_, _) => windows.ShowMainWindow();
         _refreshItem = new Forms.ToolStripMenuItem();
-        _refreshItem.Click += async (_, _) => await viewModel.RefreshAllAsync();
+        _refreshItem.Click += async (_, _) => await viewModel.RefreshAsync();
         _testItem = new Forms.ToolStripMenuItem();
         _testItem.Click += async (_, _) => await ShowTestNotificationAsync();
         _exitItem = new Forms.ToolStripMenuItem();
