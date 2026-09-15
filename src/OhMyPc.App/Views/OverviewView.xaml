@@ -1,0 +1,531 @@
+<UserControl x:Class="OhMyPc.App.Views.OverviewView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:lvc="clr-namespace:LiveChartsCore.SkiaSharpView.WPF;assembly=LiveChartsCore.SkiaSharpView.WPF"
+             xmlns:domain="clr-namespace:OhMyPc.Core.Domain;assembly=OhMyPc.Core"
+             xmlns:viewModels="clr-namespace:OhMyPc.App.ViewModels"
+             xmlns:controls="clr-namespace:OhMyPc.App.Controls"
+             Loaded="OnLoaded">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <Grid Margin="28,0,28,28">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid Grid.Row="0" Margin="0,0,0,22">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="{DynamicResource Overview_Title}" Style="{StaticResource SectionTitle}" />
+                    <TextBlock Text="{DynamicResource Overview_Description}" Style="{StaticResource MutedText}" Margin="0,5,0,0" />
+                </StackPanel>
+                <Button Grid.Column="1" Command="{Binding RefreshCommand}" ToolTip="{DynamicResource Overview_RefreshTooltip}" Style="{StaticResource IconButton}" Content="&#xE72C;" />
+            </Grid>
+
+            <Border Grid.Row="1" Style="{StaticResource PanelCard}" Margin="0,0,0,18">
+                <Grid Height="104">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="1" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="1" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center" Margin="22,0">
+                        <TextBlock Text="{DynamicResource Overview_TodayTokens}" Style="{StaticResource MutedText}" FontSize="11" />
+                        <TextBlock Text="{Binding TodayTokensText}" FontSize="27" FontWeight="SemiBold" Margin="0,4,0,0" />
+                    </StackPanel>
+                    <Border Grid.Column="1" Background="{StaticResource BorderBrush}" Margin="0,18" />
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="22,0">
+                        <TextBlock Text="{DynamicResource Overview_EstimatedCost}" Style="{StaticResource MutedText}" FontSize="11" />
+                        <TextBlock Text="{Binding TodayCostText}" FontSize="27" FontWeight="SemiBold" Foreground="{StaticResource AmberBrush}" Margin="0,4,0,0" />
+                    </StackPanel>
+                    <Border Grid.Column="3" Background="{StaticResource BorderBrush}" Margin="0,18" />
+                    <StackPanel Grid.Column="4" VerticalAlignment="Center" Margin="22,0">
+                        <TextBlock Text="{DynamicResource Overview_ActiveQuotas}" Style="{StaticResource MutedText}" FontSize="11" />
+                        <TextBlock Text="{Binding QuotaRows.Count}" FontSize="27" FontWeight="SemiBold" Foreground="{StaticResource BlueBrush}" Margin="0,4,0,0" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="2" Style="{StaticResource PanelCard}" Padding="16" Margin="0,0,0,18">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="320" />
+                    </Grid.RowDefinitions>
+                    <Grid Margin="4,0,4,14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="{DynamicResource Overview_UsageBreakdown}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        <Border Grid.Column="1" Background="{StaticResource PanelRaisedBrush}" CornerRadius="4" Padding="2">
+                            <StackPanel Orientation="Horizontal">
+                                <RadioButton GroupName="BreakdownGroup"
+                                             Content="{DynamicResource Overview_ByTool}"
+                                             Style="{StaticResource SegmentButton}"
+                                             IsChecked="{Binding IsBreakdownByTool, Mode=OneWay}"
+                                             Command="{Binding SelectBreakdownGroupCommand}"
+                                             CommandParameter="{x:Static domain:UsageBreakdownGroup.Tool}" />
+                                <RadioButton GroupName="BreakdownGroup"
+                                             Content="{DynamicResource Overview_ByModel}"
+                                             Style="{StaticResource SegmentButton}"
+                                             IsChecked="{Binding IsBreakdownByModel, Mode=OneWay}"
+                                             Command="{Binding SelectBreakdownGroupCommand}"
+                                             CommandParameter="{x:Static domain:UsageBreakdownGroup.Model}" />
+                            </StackPanel>
+                        </Border>
+                        <Border Grid.Column="3" Background="{StaticResource PanelRaisedBrush}" CornerRadius="4" Padding="2">
+                            <StackPanel Orientation="Horizontal">
+                                <RadioButton GroupName="BreakdownPeriod"
+                                             Content="{DynamicResource Overview_PeriodToday}"
+                                             Style="{StaticResource SegmentButton}"
+                                             IsChecked="{Binding IsBreakdownToday, Mode=OneWay}"
+                                             Command="{Binding SelectBreakdownPeriodCommand}"
+                                             CommandParameter="{x:Static viewModels:UsageBreakdownPeriod.Today}" />
+                                <RadioButton GroupName="BreakdownPeriod"
+                                             Content="{DynamicResource Overview_PeriodMonth}"
+                                             Style="{StaticResource SegmentButton}"
+                                             IsChecked="{Binding IsBreakdownMonth, Mode=OneWay}"
+                                             Command="{Binding SelectBreakdownPeriodCommand}"
+                                             CommandParameter="{x:Static viewModels:UsageBreakdownPeriod.Month}" />
+                                <RadioButton GroupName="BreakdownPeriod"
+                                             Content="{DynamicResource Overview_PeriodAll}"
+                                             Style="{StaticResource SegmentButton}"
+                                             IsChecked="{Binding IsBreakdownAll, Mode=OneWay}"
+                                             Command="{Binding SelectBreakdownPeriodCommand}"
+                                             CommandParameter="{x:Static viewModels:UsageBreakdownPeriod.All}" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+                    <DataGrid Grid.Row="1"
+                              ItemsSource="{Binding UsageBreakdownRows}"
+                              BorderThickness="0"
+                              RowHeight="58"
+                              CanUserSortColumns="False">
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="{Binding Source={StaticResource Localization}, Path=[Overview_BreakdownName]}" Width="1.5*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Grid>
+                                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                            <ProgressBar Grid.Row="1" Value="{Binding RelativePercent, Mode=OneWay}" Maximum="100" Height="4" Margin="0,7,10,0" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTemplateColumn Header="{Binding Source={StaticResource Localization}, Path=[Overview_BreakdownTotal]}" Width="1.05*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel HorizontalAlignment="Right">
+                                            <TextBlock Text="{Binding TotalTokensText}" FontWeight="SemiBold" HorizontalAlignment="Right" />
+                                            <TextBlock Text="{Binding CostText}" Style="{StaticResource MutedText}" FontSize="10" HorizontalAlignment="Right" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="{Binding Source={StaticResource Localization}, Path=[Overview_BreakdownInput]}" Binding="{Binding InputTokensText}" Width="1.05*" ElementStyle="{StaticResource BreakdownNumberCell}" />
+                            <DataGridTextColumn Header="{Binding Source={StaticResource Localization}, Path=[Overview_BreakdownOutput]}" Binding="{Binding OutputTokensText}" Width="1.05*" ElementStyle="{StaticResource BreakdownNumberCell}" />
+                            <DataGridTemplateColumn Header="{Binding Source={StaticResource Localization}, Path=[Overview_BreakdownCacheHit]}" Width="1.15*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel HorizontalAlignment="Right">
+                                            <TextBlock Text="{Binding CacheHitTokensText}" HorizontalAlignment="Right" />
+                                            <TextBlock Text="{Binding CacheHitPercentText}" Foreground="{StaticResource AccentBrush}" FontSize="10" HorizontalAlignment="Right" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="3" Style="{StaticResource PanelCard}" Padding="16" Margin="0,0,0,18">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid Margin="4,0,4,14">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBlock Text="{DynamicResource Overview_DailyActivity}" FontWeight="SemiBold" />
+                        <TextBlock Grid.Column="1" Text="{Binding ContributionRangeText}" Style="{StaticResource MutedText}" FontSize="11" />
+                    </Grid>
+                    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <Grid HorizontalAlignment="Left">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="34" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions><RowDefinition Height="20" /><RowDefinition Height="108" /><RowDefinition Height="28" /></Grid.RowDefinitions>
+                            <ItemsControl Grid.Column="1" ItemsSource="{Binding ContributionMonths}" Width="{Binding ContributionGridWidth}" Height="20">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><Canvas IsItemsHost="True" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemContainerStyle>
+                                    <Style TargetType="ContentPresenter"><Setter Property="Canvas.Left" Value="{Binding Left}" /></Style>
+                                </ItemsControl.ItemContainerStyle>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate><TextBlock Text="{Binding Text}" Style="{StaticResource MutedText}" FontSize="10" /></DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Canvas Grid.Row="1" Width="30" Height="108">
+                                <TextBlock Canvas.Top="0" Text="{DynamicResource Overview_MondayShort}" Style="{StaticResource MutedText}" FontSize="10" />
+                                <TextBlock Canvas.Top="32" Text="{DynamicResource Overview_WednesdayShort}" Style="{StaticResource MutedText}" FontSize="10" />
+                                <TextBlock Canvas.Top="64" Text="{DynamicResource Overview_FridayShort}" Style="{StaticResource MutedText}" FontSize="10" />
+                            </Canvas>
+                            <ItemsControl Grid.Row="1" Grid.Column="1" ItemsSource="{Binding ContributionDays}" Width="{Binding ContributionGridWidth}" Height="108">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><Canvas IsItemsHost="True" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemContainerStyle>
+                                    <Style TargetType="ContentPresenter">
+                                        <Setter Property="Canvas.Left" Value="{Binding Left}" />
+                                        <Setter Property="Canvas.Top" Value="{Binding Top}" />
+                                    </Style>
+                                </ItemsControl.ItemContainerStyle>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Style="{StaticResource ContributionCell}">
+                                            <Border.ToolTip>
+                                                <ToolTip Style="{StaticResource CardToolTip}">
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding DateText}" FontWeight="SemiBold" Foreground="#E6ECE9" Margin="0,0,0,5" />
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto" SharedSizeGroup="TooltipLabel" />
+                                                                <ColumnDefinition />
+                                                            </Grid.ColumnDefinitions>
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto" />
+                                                                <RowDefinition Height="Auto" />
+                                                                <RowDefinition Height="Auto" />
+                                                                <RowDefinition Height="Auto" />
+                                                            </Grid.RowDefinitions>
+                                                            <Grid.Resources>
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="FontSize" Value="11" />
+                                                                    <Setter Property="Margin" Value="0,0,0,3" />
+                                                                </Style>
+                                                                <Style x:Key="CardLabel" TargetType="TextBlock">
+                                                                    <Setter Property="Foreground" Value="#9AA8A1" />
+                                                                    <Setter Property="Margin" Value="0,0,16,3" />
+                                                                </Style>
+                                                            </Grid.Resources>
+                                                            <TextBlock Text="{DynamicResource Overview_TooltipTotal}" Style="{StaticResource CardLabel}" />
+                                                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                                <TextBlock Text="{Binding TokensText}" Foreground="#E6ECE9" Margin="0,0,6,3" />
+                                                                <TextBlock Text="{Binding TrendText}" FontSize="11" FontWeight="SemiBold">
+                                                                    <TextBlock.Style>
+                                                                        <Style TargetType="TextBlock">
+                                                                            <Setter Property="Foreground" Value="#9AA8A1" />
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding TrendArrow}" Value="↑">
+                                                                                    <Setter Property="Foreground" Value="#F06A6A" />
+                                                                                </DataTrigger>
+                                                                                <DataTrigger Binding="{Binding TrendArrow}" Value="↓">
+                                                                                    <Setter Property="Foreground" Value="#53C892" />
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </TextBlock.Style>
+                                                                </TextBlock>
+                                                            </StackPanel>
+                                                            <TextBlock Grid.Row="1" Text="{DynamicResource Overview_TooltipCost}" Style="{StaticResource CardLabel}" />
+                                                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding CostText}" Foreground="#E6ECE9" />
+                                                            <TextBlock Grid.Row="2" Text="{DynamicResource Overview_TooltipMessages}" Style="{StaticResource CardLabel}" />
+                                                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding MessagesText}" Foreground="#E6ECE9" />
+                                                        </Grid>
+                                                    </StackPanel>
+                                                </ToolTip>
+                                            </Border.ToolTip>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+                                <TextBlock Text="{DynamicResource Overview_Less}" Style="{StaticResource MutedText}" FontSize="10" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                <Border Width="12" Height="12" CornerRadius="2" Background="{StaticResource GridCellBrush}" Margin="0,0,4,0" />
+                                <Border Width="12" Height="12" CornerRadius="2" Background="{StaticResource LevelOneBrush}" Margin="0,0,4,0" />
+                                <Border Width="12" Height="12" CornerRadius="2" Background="{StaticResource LevelTwoBrush}" Margin="0,0,4,0" />
+                                <Border Width="12" Height="12" CornerRadius="2" Background="{StaticResource LevelThreeBrush}" Margin="0,0,4,0" />
+                                <Border Width="12" Height="12" CornerRadius="2" Background="{StaticResource LevelFourBrush}" />
+                                <TextBlock Text="{DynamicResource Overview_More}" Style="{StaticResource MutedText}" FontSize="10" VerticalAlignment="Center" Margin="6,0,0,0" />
+                            </StackPanel>
+                        </Grid>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+            <Border Grid.Row="4" Style="{StaticResource PanelCard}" Padding="16" Margin="0,0,0,24">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="250" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="125" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="{DynamicResource Overview_WeeklyCandles}" FontWeight="SemiBold" Margin="4,0,0,8" />
+                    <lvc:CartesianChart x:Name="WeeklyUsageChart" Grid.Row="1"
+                                        Series="{Binding WeeklyUsageSeries}"
+                                        XAxes="{Binding WeeklyUsageXAxes}"
+                                        YAxes="{Binding WeeklyUsageYAxes}"
+                                        DrawMargin="{Binding WeeklyChartDrawMargin}"
+                                        Background="{StaticResource PanelBrush}"
+                                        LegendPosition="Hidden"
+                                        DrawMarginFrame="{x:Null}" />
+                    <TextBlock Grid.Row="2" Text="{DynamicResource Overview_WeeklyMessages}" FontWeight="SemiBold" Margin="4,12,0,2" />
+                    <lvc:CartesianChart x:Name="WeeklyMessageChart" Grid.Row="3"
+                                        Series="{Binding WeeklyMessageSeries}"
+                                        XAxes="{Binding WeeklyMessageXAxes}"
+                                        YAxes="{Binding WeeklyMessageYAxes}"
+                                        DrawMargin="{Binding WeeklyChartDrawMargin}"
+                                        Background="{StaticResource PanelBrush}"
+                                        LegendPosition="Hidden"
+                                        DrawMarginFrame="{x:Null}" />
+                </Grid>
+            </Border>
+
+            <Grid Grid.Row="5" Margin="0,0,0,12">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="{DynamicResource Overview_CurrentQuotas}" Style="{StaticResource SectionTitle}" />
+                    <TextBlock Text="{DynamicResource Overview_CurrentQuotasDescription}" Style="{StaticResource MutedText}" Margin="0,5,0,0" />
+                </StackPanel>
+                <Button Grid.Column="1"
+                        Content="{DynamicResource Sources_ImportEnvironment}"
+                        Click="ImportEnvironment_Click"
+                        ToolTip="{DynamicResource Sources_ImportEnvironmentTooltip}"
+                        VerticalAlignment="Bottom" />
+            </Grid>
+            <ItemsControl Grid.Row="6" ItemsSource="{Binding QuotaCards}">
+                <ItemsControl.Resources>
+                    <DataTemplate DataType="{x:Type viewModels:QuotaSourceCardViewModel}">
+                        <Border Style="{StaticResource QuotaCard}">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Text="{Binding SourceName}" Style="{StaticResource CardTitle}" />
+                                        <TextBlock Text="{Binding ProviderTypeText}" Style="{StaticResource CardMeta}" Margin="0,3,0,0" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" Text="{Binding StatusText}" Style="{StaticResource CardMeta}" VerticalAlignment="Top" />
+                                </Grid>
+                                <TextBlock Grid.Row="1" Text="{Binding EndpointText}" Style="{StaticResource CardMeta}" TextTrimming="CharacterEllipsis" Margin="0,8,0,0" />
+                                <Grid Grid.Row="2" Margin="0,2,0,10">
+                                    <ItemsControl ItemsSource="{Binding Quotas}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0" Margin="0,10,0,0">
+                                                    <Grid>
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="Auto" />
+                                                        </Grid.RowDefinitions>
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                            <StackPanel>
+                                                                <TextBlock Text="{Binding Label}" Style="{StaticResource CardMeta}" />
+                                                                <TextBlock Text="{Binding UsedText}" FontSize="11" Margin="0,2,0,0" />
+                                                            </StackPanel>
+                                                            <StackPanel Grid.Column="1" HorizontalAlignment="Right">
+                                                                <TextBlock Text="{Binding PercentText}" Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold" HorizontalAlignment="Right" />
+                                                                <TextBlock Text="{Binding RemainingText}" Style="{StaticResource CardMeta}" HorizontalAlignment="Right" Margin="0,2,0,0" />
+                                                            </StackPanel>
+                                                        </Grid>
+                                                        <ProgressBar Grid.Row="1" Value="{Binding RemainingPercent, Mode=OneWay}" Maximum="100" Margin="0,8,0,0" />
+                                                        <TextBlock Grid.Row="2" Text="{Binding ResetText}" Style="{StaticResource CardMeta}" Margin="0,4,0,0" />
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <TextBlock Text="{DynamicResource Quota_NoCurrentData}" VerticalAlignment="Center">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock" BasedOn="{StaticResource CardMeta}">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding HasQuotas}" Value="False">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Grid>
+                                <Border Grid.Row="3"
+                                        BorderBrush="{StaticResource BorderBrush}"
+                                        BorderThickness="0,1,0,0"
+                                        Padding="0,10,0,0"
+                                        Margin="0,0,0,10">
+                                    <Border.Style>
+                                        <Style TargetType="Border">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasModelStatusEndpoint}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Border.Style>
+                                    <StackPanel>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{DynamicResource ModelStatus_Title}" FontWeight="SemiBold" FontSize="11" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{Binding ModelStatusUpdatedText}" Style="{StaticResource CardMeta}" FontSize="10" VerticalAlignment="Center" Margin="8,0,4,0" />
+                                            <Button Grid.Column="2"
+                                                    Content="&#xE72C;"
+                                                    Style="{StaticResource CardActionButton}"
+                                                    ToolTip="{DynamicResource ModelStatus_RefreshTooltip}"
+                                                    Click="RefreshModelStatus_Click" />
+                                        </Grid>
+                                        <TextBlock Text="{Binding ModelStatusError}"
+                                                   Foreground="{StaticResource CriticalBrush}"
+                                                   FontSize="10"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding ModelStatusError}"
+                                                   Margin="0,5,0,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasModelStatusError}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <TextBlock Text="{DynamicResource ModelStatus_Waiting}" Margin="0,8,0,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock" BasedOn="{StaticResource CardMeta}">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding ShowModelStatusWaiting}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <ItemsControl ItemsSource="{Binding ModelStatuses}" Margin="0,4,0,0">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Margin="0,6,0,2" ToolTip="{Binding ErrorText}">
+                                                        <Grid>
+                                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                            <TextBlock Text="{Binding Model}" FontWeight="SemiBold" FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                                                                <Ellipse Width="7" Height="7" Margin="0,0,5,0">
+                                                                    <Ellipse.Style>
+                                                                        <Style TargetType="Ellipse">
+                                                                            <Setter Property="Fill" Value="{StaticResource CriticalBrush}" />
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding IsAvailable}" Value="True">
+                                                                                    <Setter Property="Fill" Value="{StaticResource AccentBrush}" />
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </Ellipse.Style>
+                                                                </Ellipse>
+                                                                <TextBlock Text="{Binding StatusText}" FontSize="10">
+                                                                    <TextBlock.Style>
+                                                                        <Style TargetType="TextBlock">
+                                                                            <Setter Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                                            <Style.Triggers>
+                                                                                <DataTrigger Binding="{Binding IsAvailable}" Value="True">
+                                                                                    <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                                                                </DataTrigger>
+                                                                            </Style.Triggers>
+                                                                        </Style>
+                                                                    </TextBlock.Style>
+                                                                </TextBlock>
+                                                            </StackPanel>
+                                                        </Grid>
+                                                        <Grid Margin="0,4,0,0">
+                                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                            <TextBlock Text="{Binding SummaryText}" Style="{StaticResource CardMeta}" FontSize="10" />
+                                                            <TextBlock Grid.Column="1" Text="{Binding LatencyText}" Style="{StaticResource CardMeta}" FontSize="10" />
+                                                        </Grid>
+                                                        <ItemsControl ItemsSource="{Binding Samples}" Margin="0,6,0,0">
+                                                            <ItemsControl.ItemsPanel>
+                                                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                                            </ItemsControl.ItemsPanel>
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate>
+                                                                    <Border Width="9" Height="7" Margin="0,0,3,0" CornerRadius="1">
+                                                                        <Border.Style>
+                                                                            <Style TargetType="Border">
+                                                                                <Setter Property="Background" Value="{StaticResource GridCellBrush}" />
+                                                                                <Style.Triggers>
+                                                                                    <DataTrigger Binding="{Binding Available}" Value="True">
+                                                                                        <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+                                                                                    </DataTrigger>
+                                                                                    <DataTrigger Binding="{Binding Available}" Value="False">
+                                                                                        <Setter Property="Background" Value="{StaticResource CriticalBrush}" />
+                                                                                    </DataTrigger>
+                                                                                </Style.Triggers>
+                                                                            </Style>
+                                                                        </Border.Style>
+                                                                    </Border>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                                <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Button Content="&#xE70F;"
+                                            Style="{StaticResource CardActionButton}"
+                                            ToolTip="{DynamicResource Common_EditTooltip}"
+                                            Click="EditQuotaSource_Click" />
+                                    <Button Content="&#xE74D;"
+                                            Style="{StaticResource CardActionButton}"
+                                            ToolTip="{DynamicResource Common_DeleteTooltip}"
+                                            Click="DeleteQuotaSource_Click" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                    <DataTemplate DataType="{x:Type viewModels:AddQuotaSourceCardViewModel}">
+                        <Button Style="{StaticResource AddCardButton}" Click="AddSource_Click">
+                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="26" Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center" />
+                                <TextBlock Text="{DynamicResource Sources_AddCard}" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,10,0,0" />
+                                <TextBlock Text="{DynamicResource Sources_AddCardDescription}" Style="{StaticResource CardMeta}" HorizontalAlignment="Center" Margin="0,4,0,0" />
+                            </StackPanel>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.Resources>
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <controls:MasonryPanel IsItemsHost="True"
+                                                ColumnWidth="290"
+                                                HorizontalSpacing="12"
+                                                VerticalSpacing="12" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+        </Grid>
+    </ScrollViewer>
+</UserControl>
