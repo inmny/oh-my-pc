@@ -301,7 +301,7 @@ public static class NotificationRetentionPolicy
 
 public sealed class AppSettings
 {
-    public string Theme { get; set; } = "Dark";
+    public string Theme { get; set; } = "omp-dark";
     public string Language { get; set; } = "zh-CN";
     public bool StartWithWindows { get; set; } = true;
     public bool NotificationsEnabled { get; set; } = true;

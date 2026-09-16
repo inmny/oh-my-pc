@@ -32,6 +32,7 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly StartupRegistrationService _startup;
     private readonly UpdateCheckService _updates;
     private readonly LocalizationService _text;
+    private readonly ThemeService _themes;
     private readonly ILogger<MainViewModel> _logger;
     private AppSettings _savedSettings = new();
     private readonly Dictionary<DateOnly, UsageTrendPoint> _usageByDate = [];
@@ -41,8 +42,14 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly ObservableCollection<ObservableValue> _weeklyMessageValues = [];
     private readonly List<string> _weeklyLabels = [];
     private readonly SemaphoreSlim _usageRefreshGate = new(1, 1);
-    private readonly CandlesticksSeries<FinancialPointI> _weeklyUsageSeries;
-    private readonly ColumnSeries<ObservableValue> _weeklyMessageSeries;
+    private CandlesticksSeries<FinancialPointI> _weeklyUsageSeries = null!;
+    private ColumnSeries<ObservableValue> _weeklyMessageSeries = null!;
+    private IReadOnlyList<ISeries> _weeklyUsageSeriesView = null!;
+    private ISeries[] _weeklyMessageSeriesView = null!;
+    private Axis[] _weeklyUsageXAxes = null!;
+    private Axis[] _weeklyUsageYAxes = null!;
+    private Axis[] _weeklyMessageXAxes = null!;
+    private Axis[] _weeklyMessageYAxes = null!;
     private readonly Controls.WeeklyUsageTooltip _candleTooltip;
     private readonly Controls.WeeklyUsageTooltip _messageTooltip;
     private Dictionary<int, WeeklyUsageSummary> _weeklySummaries = [];
@@ -96,6 +103,7 @@ public sealed partial class MainViewModel : ObservableObject
         StartupRegistrationService startup,
         UpdateCheckService updates,
         LocalizationService text,
+        ThemeService themes,
         ILogger<MainViewModel> logger)
     {
         _store = store;
@@ -119,30 +127,11 @@ public sealed partial class MainViewModel : ObservableObject
             () => UpdateBannerText = _text.Format("Update_BannerFound", info.TargetVersion));
         _updates.DownloadProgress += (_, progress) => InvokeOnUi(
             () => UpdateBannerText = _text.Format("Update_BannerDownloading", progress));
-        _weeklyUsageSeries = new CandlesticksSeries<FinancialPointI>
-        {
-            Values = _weeklyUsageValues,
-            UpFill = new SolidColorPaint(new SKColor(240, 106, 106, 105)),
-            UpStroke = new SolidColorPaint(new SKColor(240, 106, 106), 2),
-            DownFill = new SolidColorPaint(new SKColor(83, 200, 146, 110)),
-            DownStroke = new SolidColorPaint(new SKColor(83, 200, 146), 2),
-            MaxBarWidth = 8
-        };
-        _weeklyMessageSeries = new ColumnSeries<ObservableValue>
-        {
-            Values = _weeklyMessageValues,
-            Fill = new SolidColorPaint(new SKColor(99, 179, 237, 190)),
-            Stroke = null,
-            MaxBarWidth = 12
-        };
+        _themes = themes;
+        _themes.ThemeChanged += (_, _) => ApplyChartTheme();
+        ApplyChartTheme();
         _candleTooltip = new Controls.WeeklyUsageTooltip(text, compact: false);
         _messageTooltip = new Controls.WeeklyUsageTooltip(text, compact: true);
-        WeeklyUsageSeries = [_weeklyUsageSeries];
-        WeeklyUsageXAxes = [CreateCategoryAxis(_weeklyLabels, 4, ContributionWeekCount)];
-        WeeklyUsageYAxes = [CreateValueAxis()];
-        WeeklyMessageSeries = [_weeklyMessageSeries];
-        WeeklyMessageXAxes = [CreateCategoryAxis(_weeklyLabels, 4, ContributionWeekCount)];
-        WeeklyMessageYAxes = [CreateValueAxis(startAtZero: true)];
         _localUsage.Refreshed += BackgroundUsageRefreshCompleted;
         _quotas.Refreshed += BackgroundQuotaRefreshCompleted;
         _inputStatus.Refreshed += BackgroundInputStatusRefreshCompleted;
@@ -174,12 +163,12 @@ public sealed partial class MainViewModel : ObservableObject
     public bool IsBreakdownMonth => _breakdownPeriod == UsageBreakdownPeriod.Month;
     public bool IsBreakdownAll => _breakdownPeriod == UsageBreakdownPeriod.All;
     public double ContributionGridWidth => ContributionWeekCount * ContributionCellStride - 4;
-    public IReadOnlyList<ISeries> WeeklyUsageSeries { get; }
-    public Axis[] WeeklyUsageXAxes { get; }
-    public Axis[] WeeklyUsageYAxes { get; }
-    public ISeries[] WeeklyMessageSeries { get; }
-    public Axis[] WeeklyMessageXAxes { get; }
-    public Axis[] WeeklyMessageYAxes { get; }
+    public IReadOnlyList<ISeries> WeeklyUsageSeries => _weeklyUsageSeriesView;
+    public Axis[] WeeklyUsageXAxes => _weeklyUsageXAxes;
+    public Axis[] WeeklyUsageYAxes => _weeklyUsageYAxes;
+    public ISeries[] WeeklyMessageSeries => _weeklyMessageSeriesView;
+    public Axis[] WeeklyMessageXAxes => _weeklyMessageXAxes;
+    public Axis[] WeeklyMessageYAxes => _weeklyMessageYAxes;
     public Margin WeeklyChartDrawMargin { get; } = new(82, Margin.Auto, 28, Margin.Auto);
     /// <summary>两张图表的自定义悬浮框实例（由总览视图挂到图表控件上）。</summary>
     public Controls.WeeklyUsageTooltip CandleTooltip => _candleTooltip;
@@ -189,6 +178,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         Settings = await _store.GetSettingsAsync();
         Settings.NotificationHistoryRetentionDays = NotificationRetentionPolicy.Normalize(Settings.NotificationHistoryRetentionDays);
+        Settings.Theme = ThemeService.Normalize(Settings.Theme);
         _savedSettings = SnapshotSettings(Settings);
         RefreshLocalApiStatus();
         await RefreshUsageAsync(fullHistory: true);
@@ -356,6 +346,7 @@ public sealed partial class MainViewModel : ObservableObject
             _savedSettings = SnapshotSettings(candidate);
             Settings = candidate;
             _text.Apply(candidate.Language);
+            _themes.Apply(candidate.Theme);
             RefreshLocalApiStatus();
             _startup.Apply(candidate.StartWithWindows);
             RefreshUsageLocalization(force: true);
@@ -531,7 +522,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     /// <summary>date 前一日的总 tokens（范围外记 0，环比不显示）。</summary>
     private long PreviousDayTokens(DateOnly date) =>
-        date > _usageStart ? _usageByDate.GetValueOrDefault(date.AddDays(-1)).TotalTokens : 0;
+        date > _usageStart && _usageByDate.TryGetValue(date.AddDays(-1), out var previous) ? previous.TotalTokens : 0;
 
     /// <summary>重建每周摘要供 tooltip 查询（含上周环比）。</summary>
     private void RefreshWeeklySummaries()
@@ -683,7 +674,49 @@ public sealed partial class MainViewModel : ObservableObject
         LastUpdated = _text.Format("Status_Updated", DateTime.Now);
     }
 
-    private static Axis CreateCategoryAxis(IReadOnlyList<string> labels, double minimumStep, int pointCount) => new()
+    /// <summary>按当前主题重建图表的系列与坐标轴绘制，并在主题切换时由 ThemeService 触发。</summary>
+    private void ApplyChartTheme()
+    {
+        var muted = Sk(_themes.GetColor("MutedBrush"));
+        var border = Sk(_themes.GetColor("BorderBrush"));
+        var rise = Sk(_themes.GetColor("CriticalBrush"));
+        var fall = Sk(_themes.GetColor("SuccessBrush"));
+        var blue = Sk(_themes.GetColor("BlueBrush"));
+        _weeklyUsageSeries = new CandlesticksSeries<FinancialPointI>
+        {
+            Values = _weeklyUsageValues,
+            Name = _text["Overview_WeeklyCandles"],
+            UpFill = new SolidColorPaint(new SKColor(rise.Red, rise.Green, rise.Blue, 105)),
+            UpStroke = new SolidColorPaint(rise, 2),
+            DownFill = new SolidColorPaint(new SKColor(fall.Red, fall.Green, fall.Blue, 110)),
+            DownStroke = new SolidColorPaint(fall, 2),
+            MaxBarWidth = 8
+        };
+        _weeklyMessageSeries = new ColumnSeries<ObservableValue>
+        {
+            Values = _weeklyMessageValues,
+            Name = _text["Overview_WeeklyMessages"],
+            Fill = new SolidColorPaint(new SKColor(blue.Red, blue.Green, blue.Blue, 190)),
+            Stroke = null,
+            MaxBarWidth = 12
+        };
+        _weeklyUsageSeriesView = [_weeklyUsageSeries];
+        _weeklyUsageXAxes = [CreateCategoryAxis(_weeklyLabels, 4, ContributionWeekCount, muted, border)];
+        _weeklyUsageYAxes = [CreateValueAxis(muted: muted, separators: border)];
+        _weeklyMessageSeriesView = [_weeklyMessageSeries];
+        _weeklyMessageXAxes = [CreateCategoryAxis(_weeklyLabels, 4, ContributionWeekCount, muted, border)];
+        _weeklyMessageYAxes = [CreateValueAxis(startAtZero: true, muted: muted, separators: border)];
+        OnPropertyChanged(nameof(WeeklyUsageSeries));
+        OnPropertyChanged(nameof(WeeklyUsageXAxes));
+        OnPropertyChanged(nameof(WeeklyUsageYAxes));
+        OnPropertyChanged(nameof(WeeklyMessageSeries));
+        OnPropertyChanged(nameof(WeeklyMessageXAxes));
+        OnPropertyChanged(nameof(WeeklyMessageYAxes));
+    }
+
+    private static SKColor Sk(System.Windows.Media.Color color) => new(color.R, color.G, color.B);
+
+    private static Axis CreateCategoryAxis(IReadOnlyList<string> labels, double minimumStep, int pointCount, SKColor muted, SKColor separators) => new()
     {
         UnitWidth = 1,
         MinStep = minimumStep,
@@ -695,17 +728,17 @@ public sealed partial class MainViewModel : ObservableObject
             var index = (int)Math.Round(value);
             return index >= 0 && index < labels.Count ? labels[index] : "";
         },
-        LabelsPaint = new SolidColorPaint(new SKColor(154, 164, 159)),
-        SeparatorsPaint = new SolidColorPaint(new SKColor(54, 60, 56), 1),
+        LabelsPaint = new SolidColorPaint(muted),
+        SeparatorsPaint = new SolidColorPaint(separators, 1),
         TextSize = 11
     };
 
-    private static Axis CreateValueAxis(bool startAtZero = false)
+    private static Axis CreateValueAxis(bool startAtZero = false, SKColor muted = default, SKColor separators = default)
     {
         var axis = new Axis
         {
-            LabelsPaint = new SolidColorPaint(new SKColor(154, 164, 159)),
-            SeparatorsPaint = new SolidColorPaint(new SKColor(54, 60, 56), 1),
+            LabelsPaint = new SolidColorPaint(muted),
+            SeparatorsPaint = new SolidColorPaint(separators, 1),
             TextSize = 11,
             Labeler = CompactNumber
         };

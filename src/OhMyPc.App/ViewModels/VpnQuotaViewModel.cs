@@ -22,6 +22,7 @@ public sealed partial class VpnQuotaViewModel : ObservableObject
     private readonly IVpnQuotaClient _client;
     private readonly VpnQuotaRefreshService _refreshService;
     private readonly LocalizationService _text;
+    private readonly ThemeService _themes;
     private readonly ObservableCollection<ObservableValue> _dailyUsageValues = [];
     private readonly List<string> _dailyUsageLabels = [];
     private readonly SemaphoreSlim _loadGate = new(1, 1);
@@ -33,35 +34,31 @@ public sealed partial class VpnQuotaViewModel : ObservableObject
     private DateOnly _historyFrom;
     private DateOnly _historyTo;
     private bool _isBusy;
-    private readonly ColumnSeries<ObservableValue> _dailyUsageSeries;
+    private ColumnSeries<ObservableValue> _dailyUsageSeries = null!;
+    private ISeries[] _dailyUsageSeriesView = null!;
+    private Axis[] _dailyUsageXAxes = null!;
+    private Axis[] _dailyUsageYAxes = null!;
 
     public VpnQuotaViewModel(
         IAppStore store,
         IVpnQuotaClient client,
         VpnQuotaRefreshService refreshService,
-        LocalizationService text)
+        LocalizationService text,
+        ThemeService themes)
     {
         _store = store;
         _client = client;
         _refreshService = refreshService;
         _text = text;
-        _dailyUsageSeries = new ColumnSeries<ObservableValue>
-        {
-            Name = _text["Vpn_DailyUsageSeries"],
-            Values = _dailyUsageValues,
-            Fill = new SolidColorPaint(new SKColor(83, 200, 146, 205)),
-            Stroke = null,
-            MaxBarWidth = 18
-        };
-        DailyUsageSeries = [_dailyUsageSeries];
-        DailyUsageXAxes = [CreateDateAxis(_dailyUsageLabels)];
-        DailyUsageYAxes = [CreateValueAxis()];
+        _themes = themes;
+        ApplyChartTheme();
+        _themes.ThemeChanged += (_, _) => ApplyChartTheme();
         _refreshService.Refreshed += BackgroundRefreshCompleted;
     }
 
-    public ISeries[] DailyUsageSeries { get; }
-    public Axis[] DailyUsageXAxes { get; }
-    public Axis[] DailyUsageYAxes { get; }
+    public ISeries[] DailyUsageSeries => _dailyUsageSeriesView;
+    public Axis[] DailyUsageXAxes => _dailyUsageXAxes;
+    public Axis[] DailyUsageYAxes => _dailyUsageYAxes;
     public Margin DailyUsageDrawMargin { get; } = new(58, Margin.Auto, 24, Margin.Auto);
     public bool HasAccount => _account is not null;
     public bool IsEmpty => !HasAccount;
@@ -242,7 +239,31 @@ public sealed partial class VpnQuotaViewModel : ObservableObject
         }
     }
 
-    private static Axis CreateDateAxis(IReadOnlyList<string> labels) => new()
+    /// <summary>按当前主题重建每日用量图的系列与坐标轴，并在主题切换时由 ThemeService 触发。</summary>
+    private void ApplyChartTheme()
+    {
+        var muted = Sk(_themes.GetColor("MutedBrush"));
+        var separators = Sk(_themes.GetColor("BorderBrush"));
+        var accent = Sk(_themes.GetColor("AccentBrush"));
+        _dailyUsageSeries = new ColumnSeries<ObservableValue>
+        {
+            Name = _text["Vpn_DailyUsageSeries"],
+            Values = _dailyUsageValues,
+            Fill = new SolidColorPaint(new SKColor(accent.Red, accent.Green, accent.Blue, 205)),
+            Stroke = null,
+            MaxBarWidth = 18
+        };
+        _dailyUsageSeriesView = [_dailyUsageSeries];
+        _dailyUsageXAxes = [CreateDateAxis(_dailyUsageLabels, muted, separators)];
+        _dailyUsageYAxes = [CreateValueAxis(muted, separators)];
+        OnPropertyChanged(nameof(DailyUsageSeries));
+        OnPropertyChanged(nameof(DailyUsageXAxes));
+        OnPropertyChanged(nameof(DailyUsageYAxes));
+    }
+
+    private static SKColor Sk(System.Windows.Media.Color color) => new(color.R, color.G, color.B);
+
+    private static Axis CreateDateAxis(IReadOnlyList<string> labels, SKColor muted, SKColor separators) => new()
     {
         UnitWidth = 1,
         MinStep = 5,
@@ -254,17 +275,17 @@ public sealed partial class VpnQuotaViewModel : ObservableObject
             var index = (int)Math.Round(value);
             return index >= 0 && index < labels.Count ? labels[index] : "";
         },
-        LabelsPaint = new SolidColorPaint(new SKColor(154, 164, 159)),
-        SeparatorsPaint = new SolidColorPaint(new SKColor(54, 60, 56), 1),
+        LabelsPaint = new SolidColorPaint(muted),
+        SeparatorsPaint = new SolidColorPaint(separators, 1),
         TextSize = 11
     };
 
-    private static Axis CreateValueAxis() => new()
+    private static Axis CreateValueAxis(SKColor muted, SKColor separators) => new()
     {
         MinLimit = 0,
         Labeler = value => $"{value:0.#} GiB",
-        LabelsPaint = new SolidColorPaint(new SKColor(154, 164, 159)),
-        SeparatorsPaint = new SolidColorPaint(new SKColor(54, 60, 56), 1),
+        LabelsPaint = new SolidColorPaint(muted),
+        SeparatorsPaint = new SolidColorPaint(separators, 1),
         TextSize = 11
     };
 

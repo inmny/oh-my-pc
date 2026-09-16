@@ -255,6 +255,14 @@
     <sys:String x:Key="Settings_Description">Startup, language, danmaku presentation, and local API</sys:String>
     <sys:String x:Key="Settings_Application">Application</sys:String>
     <sys:String x:Key="Settings_ApplicationDescription">General behavior on this computer</sys:String>
+    <sys:String x:Key="Settings_Theme">Theme</sys:String>
+    <sys:String x:Key="Settings_ThemeOmpDark">Classic Dark</sys:String>
+    <sys:String x:Key="Settings_ThemeGitHubLight">GitHub Light</sys:String>
+    <sys:String x:Key="Settings_ThemeGitHubDark">GitHub Dark</sys:String>
+    <sys:String x:Key="Settings_ThemeOneLight">One Light</sys:String>
+    <sys:String x:Key="Settings_ThemeOneDark">One Dark</sys:String>
+    <sys:String x:Key="Settings_ThemeClaudeLight">Claude Light</sys:String>
+    <sys:String x:Key="Settings_ThemeClaudeDark">Claude Dark</sys:String>
     <sys:String x:Key="Settings_Language">Interface language</sys:String>
     <sys:String x:Key="Language_ZhCN">简体中文</sys:String>
     <sys:String x:Key="Language_EnUS">English</sys:String>

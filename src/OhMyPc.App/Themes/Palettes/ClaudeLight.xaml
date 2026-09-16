@@ -1,0 +1,62 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Color x:Key="BackgroundColor">#faf9f5</Color>
+    <Color x:Key="PanelColor">#ffffff</Color>
+    <Color x:Key="PanelRaisedColor">#f0eee6</Color>
+    <Color x:Key="InputColor">#ffffff</Color>
+    <Color x:Key="BorderColor">#e0dccf</Color>
+    <Color x:Key="TextColor">#1f1e1d</Color>
+    <Color x:Key="MutedColor">#8a8775</Color>
+    <Color x:Key="AccentColor">#d97757</Color>
+    <Color x:Key="AmberColor">#c08a3e</Color>
+    <Color x:Key="BlueColor">#6b96bd</Color>
+    <Color x:Key="CriticalColor">#b0433a</Color>
+    <Color x:Key="SuccessColor">#6f9d58</Color>
+    <Color x:Key="SidebarColor">#f0eee6</Color>
+    <Color x:Key="HoverColor">#ece9db</Color>
+    <Color x:Key="PressedColor">#e0dccd</Color>
+    <Color x:Key="SelectedColor">#f4e3d7</Color>
+    <Color x:Key="GridCellColor">#e9e5d8</Color>
+    <Color x:Key="AlternateRowColor">#f7f5ee</Color>
+    <Color x:Key="LevelOneColor">#dce8cf</Color>
+    <Color x:Key="LevelTwoColor">#b5d3a5</Color>
+    <Color x:Key="LevelThreeColor">#8cba7d</Color>
+    <Color x:Key="LevelFourColor">#639a56</Color>
+    <Color x:Key="OnAccentColor">#ffffff</Color>
+    <Color x:Key="TraySurfaceColor">#F5ffffff</Color>
+    <Color x:Key="OverlaySurfaceColor">#EBfaf9f5</Color>
+    <Color x:Key="CardTipColor">#ffffff</Color>
+    <Color x:Key="CardTipBorderColor">#e0dccf</Color>
+    <Color x:Key="CardTipTextColor">#1f1e1d</Color>
+
+    <SolidColorBrush x:Key="BackgroundBrush" Color="{StaticResource BackgroundColor}" />
+    <SolidColorBrush x:Key="PanelBrush" Color="{StaticResource PanelColor}" />
+    <SolidColorBrush x:Key="PanelRaisedBrush" Color="{StaticResource PanelRaisedColor}" />
+    <SolidColorBrush x:Key="InputBrush" Color="{StaticResource InputColor}" />
+    <SolidColorBrush x:Key="BorderBrush" Color="{StaticResource BorderColor}" />
+    <SolidColorBrush x:Key="TextBrush" Color="{StaticResource TextColor}" />
+    <SolidColorBrush x:Key="MutedBrush" Color="{StaticResource MutedColor}" />
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+    <SolidColorBrush x:Key="AmberBrush" Color="{StaticResource AmberColor}" />
+    <SolidColorBrush x:Key="BlueBrush" Color="{StaticResource BlueColor}" />
+    <SolidColorBrush x:Key="CriticalBrush" Color="{StaticResource CriticalColor}" />
+    <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource SuccessColor}" />
+    <SolidColorBrush x:Key="SidebarBrush" Color="{StaticResource SidebarColor}" />
+    <SolidColorBrush x:Key="HoverBrush" Color="{StaticResource HoverColor}" />
+    <SolidColorBrush x:Key="PressedBrush" Color="{StaticResource PressedColor}" />
+    <SolidColorBrush x:Key="SelectedBrush" Color="{StaticResource SelectedColor}" />
+    <SolidColorBrush x:Key="GridCellBrush" Color="{StaticResource GridCellColor}" />
+    <SolidColorBrush x:Key="AlternateRowBrush" Color="{StaticResource AlternateRowColor}" />
+    <SolidColorBrush x:Key="LevelOneBrush" Color="{StaticResource LevelOneColor}" />
+    <SolidColorBrush x:Key="LevelTwoBrush" Color="{StaticResource LevelTwoColor}" />
+    <SolidColorBrush x:Key="LevelThreeBrush" Color="{StaticResource LevelThreeColor}" />
+    <SolidColorBrush x:Key="LevelFourBrush" Color="{StaticResource LevelFourColor}" />
+    <SolidColorBrush x:Key="OnAccentBrush" Color="{StaticResource OnAccentColor}" />
+    <SolidColorBrush x:Key="TraySurfaceBrush" Color="{StaticResource TraySurfaceColor}" />
+    <SolidColorBrush x:Key="OverlaySurfaceBrush" Color="{StaticResource OverlaySurfaceColor}" />
+    <SolidColorBrush x:Key="CardTipBrush" Color="{StaticResource CardTipColor}" />
+    <SolidColorBrush x:Key="CardTipBorderBrush" Color="{StaticResource CardTipBorderColor}" />
+    <SolidColorBrush x:Key="CardTipTextBrush" Color="{StaticResource CardTipTextColor}" />
+    <SolidColorBrush x:Key="EmptyCardBrush" Color="{StaticResource PanelRaisedColor}" Opacity="0.28" />
+</ResourceDictionary>

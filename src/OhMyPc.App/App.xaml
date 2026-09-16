@@ -6,7 +6,7 @@
       <ResourceDictionary>
         <ResourceDictionary.MergedDictionaries>
             <ResourceDictionary Source="Resources/Strings.zh-CN.xaml" />
-            <ResourceDictionary Source="Themes/Palette.xaml" />
+            <ResourceDictionary Source="Themes/Palettes/OhMyPcDark.xaml" />
             <ResourceDictionary Source="Themes/Controls.xaml" />
             <ResourceDictionary Source="Themes/Tooltips.xaml" />
         </ResourceDictionary.MergedDictionaries>

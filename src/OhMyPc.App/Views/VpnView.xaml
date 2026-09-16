@@ -57,7 +57,7 @@
                         ToolTip="{DynamicResource Vpn_RemoveTooltip}">
                     <Button.Style>
                         <Style TargetType="Button" BasedOn="{StaticResource IconButton}">
-                            <Setter Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                            <Setter Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                             <Setter Property="Visibility" Value="Visible" />
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding Vpn.IsEmpty}" Value="True">
@@ -85,7 +85,7 @@
                             </Style.Triggers>
                         </Style>
                     </StackPanel.Style>
-                    <TextBlock Text="&#xE753;" FontFamily="Segoe Fluent Icons" FontSize="32" Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center" />
+                    <TextBlock Text="&#xE753;" FontFamily="Segoe Fluent Icons" FontSize="32" Foreground="{DynamicResource MutedBrush}" HorizontalAlignment="Center" />
                     <TextBlock Text="{DynamicResource Vpn_EmptyTitle}" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,14,0,0" />
                     <TextBlock Text="{DynamicResource Vpn_EmptyDescription}" Style="{StaticResource MutedText}" HorizontalAlignment="Center" Margin="0,6,0,0" />
                 </StackPanel>
@@ -121,7 +121,7 @@
                                 <TextBlock Text="{Binding Vpn.PlanName}" FontSize="20" FontWeight="SemiBold" />
                                 <TextBlock Text="{Binding Vpn.Email}" Style="{StaticResource MutedText}" Margin="0,4,0,0" />
                             </StackPanel>
-                            <TextBlock Grid.Column="1" Text="{Binding Vpn.StatusText}" Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold" VerticalAlignment="Top" />
+                            <TextBlock Grid.Column="1" Text="{Binding Vpn.StatusText}" Foreground="{DynamicResource AccentBrush}" FontWeight="SemiBold" VerticalAlignment="Top" />
                         </Grid>
 
                         <Grid Grid.Row="2">
@@ -130,7 +130,7 @@
                                 <TextBlock Text="{DynamicResource Vpn_Remaining}" Style="{StaticResource MutedText}" FontSize="11" />
                                 <TextBlock Text="{Binding Vpn.RemainingText}" FontSize="32" FontWeight="SemiBold" Margin="0,3,0,0" />
                             </StackPanel>
-                            <TextBlock Grid.Column="1" Text="{Binding Vpn.RemainingPercentText}" Foreground="{StaticResource AccentBrush}" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Bottom" Margin="0,0,0,5" />
+                            <TextBlock Grid.Column="1" Text="{Binding Vpn.RemainingPercentText}" Foreground="{DynamicResource AccentBrush}" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Bottom" Margin="0,0,0,5" />
                         </Grid>
                         <ProgressBar Grid.Row="4" Value="{Binding Vpn.RemainingPercent, Mode=OneWay}" Maximum="100" Height="8" />
 
@@ -145,24 +145,24 @@
                                 <TextBlock Text="{DynamicResource Vpn_Total}" Style="{StaticResource MutedText}" FontSize="11" />
                                 <TextBlock Text="{Binding Vpn.TotalText}" FontSize="16" FontWeight="SemiBold" Margin="0,4,0,0" />
                             </StackPanel>
-                            <Border Grid.Column="1" Background="{StaticResource BorderBrush}" Margin="0,-2,0,-2" />
+                            <Border Grid.Column="1" Background="{DynamicResource BorderBrush}" Margin="0,-2,0,-2" />
                             <StackPanel Grid.Column="2" Margin="18,0">
                                 <TextBlock Text="{DynamicResource Vpn_Used}" Style="{StaticResource MutedText}" FontSize="11" />
                                 <TextBlock Text="{Binding Vpn.UsedText}" FontSize="16" FontWeight="SemiBold" Margin="0,4,0,0" />
                             </StackPanel>
-                            <Border Grid.Column="3" Background="{StaticResource BorderBrush}" Margin="0,-2,0,-2" />
+                            <Border Grid.Column="3" Background="{DynamicResource BorderBrush}" Margin="0,-2,0,-2" />
                             <StackPanel Grid.Column="4" Margin="18,0">
                                 <TextBlock Text="{DynamicResource Vpn_Uploaded}" Style="{StaticResource MutedText}" FontSize="11" />
                                 <TextBlock Text="{Binding Vpn.UploadedText}" FontSize="16" FontWeight="SemiBold" Margin="0,4,0,0" />
                             </StackPanel>
-                            <Border Grid.Column="5" Background="{StaticResource BorderBrush}" Margin="0,-2,0,-2" />
+                            <Border Grid.Column="5" Background="{DynamicResource BorderBrush}" Margin="0,-2,0,-2" />
                             <StackPanel Grid.Column="6" Margin="18,0,0,0">
                                 <TextBlock Text="{DynamicResource Vpn_Downloaded}" Style="{StaticResource MutedText}" FontSize="11" />
                                 <TextBlock Text="{Binding Vpn.DownloadedText}" FontSize="16" FontWeight="SemiBold" Margin="0,4,0,0" />
                             </StackPanel>
                         </Grid>
 
-                        <Border Grid.Row="8" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,20,0,0">
+                        <Border Grid.Row="8" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,20,0,0">
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="20" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
@@ -185,7 +185,7 @@
                             </Grid>
                         </Border>
 
-                        <Border Grid.Row="9" BorderBrush="{StaticResource CriticalBrush}" BorderThickness="3,0,0,0" Background="{StaticResource PanelRaisedBrush}" Padding="12,9" Margin="0,20,0,0">
+                        <Border Grid.Row="9" BorderBrush="{DynamicResource CriticalBrush}" BorderThickness="3,0,0,0" Background="{DynamicResource PanelRaisedBrush}" Padding="12,9" Margin="0,20,0,0">
                             <Border.Style>
                                 <Style TargetType="Border">
                                     <Setter Property="Visibility" Value="Visible" />
@@ -196,7 +196,7 @@
                                     </Style.Triggers>
                                 </Style>
                             </Border.Style>
-                            <TextBlock Text="{Binding Vpn.ErrorText}" Foreground="{StaticResource CriticalBrush}" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding Vpn.ErrorText}" Foreground="{DynamicResource CriticalBrush}" TextWrapping="Wrap" />
                         </Border>
                     </Grid>
                 </Border>
@@ -226,7 +226,7 @@
                             <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
                                 <StackPanel Margin="18,0,0,0">
                                     <TextBlock Text="{DynamicResource Vpn_AverageDaily}" Style="{StaticResource MutedText}" FontSize="10" HorizontalAlignment="Right" />
-                                    <TextBlock Text="{Binding Vpn.AverageDailyText}" Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold" HorizontalAlignment="Right" Margin="0,3,0,0" />
+                                    <TextBlock Text="{Binding Vpn.AverageDailyText}" Foreground="{DynamicResource AccentBrush}" FontWeight="SemiBold" HorizontalAlignment="Right" Margin="0,3,0,0" />
                                 </StackPanel>
                                 <StackPanel Margin="18,0,0,0">
                                     <TextBlock Text="{DynamicResource Vpn_EstimatedExhaustion}" Style="{StaticResource MutedText}" FontSize="10" HorizontalAlignment="Right" />
@@ -239,7 +239,7 @@
                                                 XAxes="{Binding Vpn.DailyUsageXAxes}"
                                                 YAxes="{Binding Vpn.DailyUsageYAxes}"
                                                 DrawMargin="{Binding Vpn.DailyUsageDrawMargin}"
-                                                Background="{StaticResource PanelBrush}"
+                                                Background="{DynamicResource PanelBrush}"
                                                 LegendPosition="Hidden"
                                                 DrawMarginFrame="{x:Null}" />
                             <TextBlock Text="{DynamicResource Vpn_NotEnoughHistory}"

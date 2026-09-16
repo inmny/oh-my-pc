@@ -42,15 +42,15 @@
                         <TextBlock Text="{DynamicResource Overview_TodayTokens}" Style="{StaticResource MutedText}" FontSize="11" />
                         <TextBlock Text="{Binding TodayTokensText}" FontSize="27" FontWeight="SemiBold" Margin="0,4,0,0" />
                     </StackPanel>
-                    <Border Grid.Column="1" Background="{StaticResource BorderBrush}" Margin="0,18" />
+                    <Border Grid.Column="1" Background="{DynamicResource BorderBrush}" Margin="0,18" />
                     <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="22,0">
                         <TextBlock Text="{DynamicResource Overview_EstimatedCost}" Style="{StaticResource MutedText}" FontSize="11" />
-                        <TextBlock Text="{Binding TodayCostText}" FontSize="27" FontWeight="SemiBold" Foreground="{StaticResource AmberBrush}" Margin="0,4,0,0" />
+                        <TextBlock Text="{Binding TodayCostText}" FontSize="27" FontWeight="SemiBold" Foreground="{DynamicResource AmberBrush}" Margin="0,4,0,0" />
                     </StackPanel>
-                    <Border Grid.Column="3" Background="{StaticResource BorderBrush}" Margin="0,18" />
+                    <Border Grid.Column="3" Background="{DynamicResource BorderBrush}" Margin="0,18" />
                     <StackPanel Grid.Column="4" VerticalAlignment="Center" Margin="22,0">
                         <TextBlock Text="{DynamicResource Overview_ActiveQuotas}" Style="{StaticResource MutedText}" FontSize="11" />
-                        <TextBlock Text="{Binding QuotaRows.Count}" FontSize="27" FontWeight="SemiBold" Foreground="{StaticResource BlueBrush}" Margin="0,4,0,0" />
+                        <TextBlock Text="{Binding QuotaRows.Count}" FontSize="27" FontWeight="SemiBold" Foreground="{DynamicResource BlueBrush}" Margin="0,4,0,0" />
                     </StackPanel>
                 </Grid>
             </Border>
@@ -69,7 +69,7 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="{DynamicResource Overview_UsageBreakdown}" FontWeight="SemiBold" VerticalAlignment="Center" />
-                        <Border Grid.Column="1" Background="{StaticResource PanelRaisedBrush}" CornerRadius="4" Padding="2">
+                        <Border Grid.Column="1" Background="{DynamicResource PanelRaisedBrush}" CornerRadius="4" Padding="2">
                             <StackPanel Orientation="Horizontal">
                                 <RadioButton GroupName="BreakdownGroup"
                                              Content="{DynamicResource Overview_ByTool}"
@@ -85,7 +85,7 @@
                                              CommandParameter="{x:Static domain:UsageBreakdownGroup.Model}" />
                             </StackPanel>
                         </Border>
-                        <Border Grid.Column="3" Background="{StaticResource PanelRaisedBrush}" CornerRadius="4" Padding="2">
+                        <Border Grid.Column="3" Background="{DynamicResource PanelRaisedBrush}" CornerRadius="4" Padding="2">
                             <StackPanel Orientation="Horizontal">
                                 <RadioButton GroupName="BreakdownPeriod"
                                              Content="{DynamicResource Overview_PeriodToday}"
@@ -142,7 +142,7 @@
                                     <DataTemplate>
                                         <StackPanel HorizontalAlignment="Right">
                                             <TextBlock Text="{Binding CacheHitTokensText}" HorizontalAlignment="Right" />
-                                            <TextBlock Text="{Binding CacheHitPercentText}" Foreground="{StaticResource AccentBrush}" FontSize="10" HorizontalAlignment="Right" Margin="0,2,0,0" />
+                                            <TextBlock Text="{Binding CacheHitPercentText}" Foreground="{DynamicResource AccentBrush}" FontSize="10" HorizontalAlignment="Right" Margin="0,2,0,0" />
                                         </StackPanel>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
@@ -195,7 +195,7 @@
                                             <Border.ToolTip>
                                                 <ToolTip Style="{StaticResource CardToolTip}">
                                                     <StackPanel>
-                                                        <TextBlock Text="{Binding DateText}" FontWeight="SemiBold" Foreground="#E6ECE9" Margin="0,0,0,5" />
+                                                        <TextBlock Text="{Binding DateText}" FontWeight="SemiBold" Foreground="{DynamicResource CardTipTextBrush}" Margin="0,0,0,5" />
                                                         <Grid>
                                                             <Grid.ColumnDefinitions>
                                                                 <ColumnDefinition Width="Auto" SharedSizeGroup="TooltipLabel" />
@@ -213,23 +213,23 @@
                                                                     <Setter Property="Margin" Value="0,0,0,3" />
                                                                 </Style>
                                                                 <Style x:Key="CardLabel" TargetType="TextBlock">
-                                                                    <Setter Property="Foreground" Value="#9AA8A1" />
+                                                                    <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
                                                                     <Setter Property="Margin" Value="0,0,16,3" />
                                                                 </Style>
                                                             </Grid.Resources>
                                                             <TextBlock Text="{DynamicResource Overview_TooltipTotal}" Style="{StaticResource CardLabel}" />
                                                             <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                                                <TextBlock Text="{Binding TokensText}" Foreground="#E6ECE9" Margin="0,0,6,3" />
+                                                                <TextBlock Text="{Binding TokensText}" Foreground="{DynamicResource CardTipTextBrush}" Margin="0,0,6,3" />
                                                                 <TextBlock Text="{Binding TrendText}" FontSize="11" FontWeight="SemiBold">
                                                                     <TextBlock.Style>
                                                                         <Style TargetType="TextBlock">
-                                                                            <Setter Property="Foreground" Value="#9AA8A1" />
+                                                                            <Setter Property="Foreground" Value="{DynamicResource MutedBrush}" />
                                                                             <Style.Triggers>
                                                                                 <DataTrigger Binding="{Binding TrendArrow}" Value="↑">
-                                                                                    <Setter Property="Foreground" Value="#F06A6A" />
+                                                                                    <Setter Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                                                 </DataTrigger>
                                                                                 <DataTrigger Binding="{Binding TrendArrow}" Value="↓">
-                                                                                    <Setter Property="Foreground" Value="#53C892" />
+                                                                                    <Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" />
                                                                                 </DataTrigger>
                                                                             </Style.Triggers>
                                                                         </Style>
@@ -237,9 +237,9 @@
                                                                 </TextBlock>
                                                             </StackPanel>
                                                             <TextBlock Grid.Row="1" Text="{DynamicResource Overview_TooltipCost}" Style="{StaticResource CardLabel}" />
-                                                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding CostText}" Foreground="#E6ECE9" />
+                                                            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding CostText}" Foreground="{DynamicResource CardTipTextBrush}" />
                                                             <TextBlock Grid.Row="2" Text="{DynamicResource Overview_TooltipMessages}" Style="{StaticResource CardLabel}" />
-                                                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding MessagesText}" Foreground="#E6ECE9" />
+                                                            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding MessagesText}" Foreground="{DynamicResource CardTipTextBrush}" />
                                                         </Grid>
                                                     </StackPanel>
                                                 </ToolTip>
@@ -250,11 +250,11 @@
                             </ItemsControl>
                             <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
                                 <TextBlock Text="{DynamicResource Overview_Less}" Style="{StaticResource MutedText}" FontSize="10" VerticalAlignment="Center" Margin="0,0,6,0" />
-                                <Border Width="12" Height="12" CornerRadius="2" Background="{StaticResource GridCellBrush}" Margin="0,0,4,0" />
-                                <Border Width="12" Height="12" CornerRadius="2" Background="{StaticResource LevelOneBrush}" Margin="0,0,4,0" />
-                                <Border Width="12" Height="12" CornerRadius="2" Background="{StaticResource LevelTwoBrush}" Margin="0,0,4,0" />
-                                <Border Width="12" Height="12" CornerRadius="2" Background="{StaticResource LevelThreeBrush}" Margin="0,0,4,0" />
-                                <Border Width="12" Height="12" CornerRadius="2" Background="{StaticResource LevelFourBrush}" />
+                                <Border Width="12" Height="12" CornerRadius="2" Background="{DynamicResource GridCellBrush}" Margin="0,0,4,0" />
+                                <Border Width="12" Height="12" CornerRadius="2" Background="{DynamicResource LevelOneBrush}" Margin="0,0,4,0" />
+                                <Border Width="12" Height="12" CornerRadius="2" Background="{DynamicResource LevelTwoBrush}" Margin="0,0,4,0" />
+                                <Border Width="12" Height="12" CornerRadius="2" Background="{DynamicResource LevelThreeBrush}" Margin="0,0,4,0" />
+                                <Border Width="12" Height="12" CornerRadius="2" Background="{DynamicResource LevelFourBrush}" />
                                 <TextBlock Text="{DynamicResource Overview_More}" Style="{StaticResource MutedText}" FontSize="10" VerticalAlignment="Center" Margin="6,0,0,0" />
                             </StackPanel>
                         </Grid>
@@ -276,7 +276,7 @@
                                         XAxes="{Binding WeeklyUsageXAxes}"
                                         YAxes="{Binding WeeklyUsageYAxes}"
                                         DrawMargin="{Binding WeeklyChartDrawMargin}"
-                                        Background="{StaticResource PanelBrush}"
+                                        Background="{DynamicResource PanelBrush}"
                                         LegendPosition="Hidden"
                                         DrawMarginFrame="{x:Null}" />
                     <TextBlock Grid.Row="2" Text="{DynamicResource Overview_WeeklyMessages}" FontWeight="SemiBold" Margin="4,12,0,2" />
@@ -285,7 +285,7 @@
                                         XAxes="{Binding WeeklyMessageXAxes}"
                                         YAxes="{Binding WeeklyMessageYAxes}"
                                         DrawMargin="{Binding WeeklyChartDrawMargin}"
-                                        Background="{StaticResource PanelBrush}"
+                                        Background="{DynamicResource PanelBrush}"
                                         LegendPosition="Hidden"
                                         DrawMarginFrame="{x:Null}" />
                 </Grid>
@@ -328,7 +328,7 @@
                                     <ItemsControl ItemsSource="{Binding Quotas}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <Border BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0" Margin="0,10,0,0">
+                                                <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,10,0,0" Margin="0,10,0,0">
                                                     <Grid>
                                                         <Grid.RowDefinitions>
                                                             <RowDefinition Height="Auto" />
@@ -342,7 +342,7 @@
                                                                 <TextBlock Text="{Binding UsedText}" FontSize="11" Margin="0,2,0,0" />
                                                             </StackPanel>
                                                             <StackPanel Grid.Column="1" HorizontalAlignment="Right">
-                                                                <TextBlock Text="{Binding PercentText}" Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold" HorizontalAlignment="Right" />
+                                                                <TextBlock Text="{Binding PercentText}" Foreground="{DynamicResource AccentBrush}" FontWeight="SemiBold" HorizontalAlignment="Right" />
                                                                 <TextBlock Text="{Binding RemainingText}" Style="{StaticResource CardMeta}" HorizontalAlignment="Right" Margin="0,2,0,0" />
                                                             </StackPanel>
                                                         </Grid>
@@ -367,7 +367,7 @@
                                     </TextBlock>
                                 </Grid>
                                 <Border Grid.Row="3"
-                                        BorderBrush="{StaticResource BorderBrush}"
+                                        BorderBrush="{DynamicResource BorderBrush}"
                                         BorderThickness="0,1,0,0"
                                         Padding="0,10,0,0"
                                         Margin="0,0,0,10">
@@ -397,7 +397,7 @@
                                                     Click="RefreshModelStatus_Click" />
                                         </Grid>
                                         <TextBlock Text="{Binding ModelStatusError}"
-                                                   Foreground="{StaticResource CriticalBrush}"
+                                                   Foreground="{DynamicResource CriticalBrush}"
                                                    FontSize="10"
                                                    TextTrimming="CharacterEllipsis"
                                                    ToolTip="{Binding ModelStatusError}"
@@ -436,10 +436,10 @@
                                                                 <Ellipse Width="7" Height="7" Margin="0,0,5,0">
                                                                     <Ellipse.Style>
                                                                         <Style TargetType="Ellipse">
-                                                                            <Setter Property="Fill" Value="{StaticResource CriticalBrush}" />
+                                                                            <Setter Property="Fill" Value="{DynamicResource CriticalBrush}" />
                                                                             <Style.Triggers>
                                                                                 <DataTrigger Binding="{Binding IsAvailable}" Value="True">
-                                                                                    <Setter Property="Fill" Value="{StaticResource AccentBrush}" />
+                                                                                    <Setter Property="Fill" Value="{DynamicResource SuccessBrush}" />
                                                                                 </DataTrigger>
                                                                             </Style.Triggers>
                                                                         </Style>
@@ -448,10 +448,10 @@
                                                                 <TextBlock Text="{Binding StatusText}" FontSize="10">
                                                                     <TextBlock.Style>
                                                                         <Style TargetType="TextBlock">
-                                                                            <Setter Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                                                                            <Setter Property="Foreground" Value="{DynamicResource CriticalBrush}" />
                                                                             <Style.Triggers>
                                                                                 <DataTrigger Binding="{Binding IsAvailable}" Value="True">
-                                                                                    <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+                                                                                    <Setter Property="Foreground" Value="{DynamicResource AccentBrush}" />
                                                                                 </DataTrigger>
                                                                             </Style.Triggers>
                                                                         </Style>
@@ -473,13 +473,13 @@
                                                                     <Border Width="9" Height="7" Margin="0,0,3,0" CornerRadius="1">
                                                                         <Border.Style>
                                                                             <Style TargetType="Border">
-                                                                                <Setter Property="Background" Value="{StaticResource GridCellBrush}" />
+                                                                                <Setter Property="Background" Value="{DynamicResource GridCellBrush}" />
                                                                                 <Style.Triggers>
                                                                                     <DataTrigger Binding="{Binding Available}" Value="True">
-                                                                                        <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+                                                                                        <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
                                                                                     </DataTrigger>
                                                                                     <DataTrigger Binding="{Binding Available}" Value="False">
-                                                                                        <Setter Property="Background" Value="{StaticResource CriticalBrush}" />
+                                                                                        <Setter Property="Background" Value="{DynamicResource CriticalBrush}" />
                                                                                     </DataTrigger>
                                                                                 </Style.Triggers>
                                                                             </Style>
@@ -510,7 +510,7 @@
                     <DataTemplate DataType="{x:Type viewModels:AddQuotaSourceCardViewModel}">
                         <Button Style="{StaticResource AddCardButton}" Click="AddSource_Click">
                             <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="26" Foreground="{StaticResource AccentBrush}" HorizontalAlignment="Center" />
+                                <TextBlock Text="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="26" Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Center" />
                                 <TextBlock Text="{DynamicResource Sources_AddCard}" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,10,0,0" />
                                 <TextBlock Text="{DynamicResource Sources_AddCardDescription}" Style="{StaticResource CardMeta}" HorizontalAlignment="Center" Margin="0,4,0,0" />
                             </StackPanel>

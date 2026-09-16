@@ -19,7 +19,7 @@
                 <TextBlock Text="{DynamicResource Settings_Description}" Style="{StaticResource MutedText}" Margin="0,5,0,0" />
             </StackPanel>
 
-            <Border Grid.Row="1" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,1" Padding="0,18" Margin="0,0,0,20">
+            <Border Grid.Row="1" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,1" Padding="0,18" Margin="0,0,0,20">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="240" />
@@ -34,6 +34,16 @@
                         <ComboBox SelectedValue="{Binding Settings.Language}" SelectedValuePath="Tag" Width="180" HorizontalAlignment="Left" Margin="0,0,0,14">
                             <ComboBoxItem Tag="zh-CN" Content="{DynamicResource Language_ZhCN}" />
                             <ComboBoxItem Tag="en-US" Content="{DynamicResource Language_EnUS}" />
+                        </ComboBox>
+                        <TextBlock Text="{DynamicResource Settings_Theme}" Margin="0,0,0,6" />
+                        <ComboBox SelectedValue="{Binding Settings.Theme}" SelectedValuePath="Tag" Width="180" HorizontalAlignment="Left" Margin="0,0,0,14">
+                            <ComboBoxItem Tag="omp-dark" Content="{DynamicResource Settings_ThemeOmpDark}" />
+                            <ComboBoxItem Tag="github-light" Content="{DynamicResource Settings_ThemeGitHubLight}" />
+                            <ComboBoxItem Tag="github-dark" Content="{DynamicResource Settings_ThemeGitHubDark}" />
+                            <ComboBoxItem Tag="one-light" Content="{DynamicResource Settings_ThemeOneLight}" />
+                            <ComboBoxItem Tag="one-dark" Content="{DynamicResource Settings_ThemeOneDark}" />
+                            <ComboBoxItem Tag="claude-light" Content="{DynamicResource Settings_ThemeClaudeLight}" />
+                            <ComboBoxItem Tag="claude-dark" Content="{DynamicResource Settings_ThemeClaudeDark}" />
                         </ComboBox>
                         <CheckBox Content="{DynamicResource Settings_StartWithWindows}" IsChecked="{Binding Settings.StartWithWindows}" Margin="0,0,0,12" />
                         <CheckBox Content="{DynamicResource Settings_CliProxyAutoStart}" IsChecked="{Binding Settings.CliProxyAutoStart}" Margin="0,0,0,12" />
@@ -62,7 +72,7 @@
                 </Grid>
             </Border>
 
-            <Border Grid.Row="2" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,0,0,20" Margin="0,0,0,20">
+            <Border Grid.Row="2" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,0,0,20" Margin="0,0,0,20">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="240" />
@@ -104,7 +114,7 @@
                 </Grid>
             </Border>
 
-            <Border Grid.Row="3" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,0,0,20" Margin="0,0,0,20">
+            <Border Grid.Row="3" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="0,0,0,20" Margin="0,0,0,20">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="240" />

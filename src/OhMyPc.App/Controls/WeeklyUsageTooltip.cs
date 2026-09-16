@@ -9,6 +9,7 @@ using Color = System.Windows.Media.Color;
 using Orientation = System.Windows.Controls.Orientation;
 using Size = System.Windows.Size;
 using Brush = System.Windows.Media.Brush;
+using Brushes = System.Windows.Media.Brushes;
 using Point = System.Windows.Point;
 using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 
@@ -42,8 +43,6 @@ public sealed class WeeklyUsageTooltip
         _grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         _border = new Border
         {
-            Background = new SolidColorBrush(Color.FromRgb(0x24, 0x2C, 0x27)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(0x3A, 0x4A, 0x40)),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(6),
             Padding = new Thickness(12, 9, 12, 9),
@@ -51,6 +50,10 @@ public sealed class WeeklyUsageTooltip
             IsHitTestVisible = false
         };
     }
+
+    /// <summary>从全局调色板取画刷：每次展示时解析，主题切换后自然跟随。</summary>
+    private static Brush Res(string key) =>
+        System.Windows.Application.Current.TryFindResource(key) as Brush ?? Brushes.Transparent;
 
     /// <summary>索引 → 摘要，与图表 X 轴索引一致，由 ViewModel 注入。</summary>
     public IReadOnlyDictionary<int, WeeklyUsageSummary> Summaries { get; set; } =
@@ -110,6 +113,8 @@ public sealed class WeeklyUsageTooltip
 
     private void BuildContent(WeeklyUsageSummary summary)
     {
+        _border.Background = Res("CardTipBrush");
+        _border.BorderBrush = Res("CardTipBorderBrush");
         _grid.Children.Clear();
         _grid.RowDefinitions.Clear();
         var row = 0;
@@ -137,7 +142,7 @@ public sealed class WeeklyUsageTooltip
         {
             Text = _text.Format("Overview_TooltipWeekRange", summary.WeekRangeText),
             FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xE6, 0xEC, 0xE9)),
+            Foreground = Res("CardTipTextBrush"),
             Margin = new Thickness(0, 0, 0, 5)
         };
         Grid.SetColumnSpan(title, 2);
@@ -151,7 +156,7 @@ public sealed class WeeklyUsageTooltip
         var label = new TextBlock
         {
             Text = _text[labelKey],
-            Foreground = new SolidColorBrush(Color.FromRgb(0x9A, 0xA8, 0xA1)),
+            Foreground = Res("MutedBrush"),
             FontSize = 11,
             Margin = new Thickness(0, 0, 16, 3)
         };
@@ -162,7 +167,7 @@ public sealed class WeeklyUsageTooltip
         valuePanel.Children.Add(new TextBlock
         {
             Text = value,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xE6, 0xEC, 0xE9)),
+            Foreground = Res("CardTipTextBrush"),
             Margin = new Thickness(0, 0, 6, 3)
         });
         if (trend is { Length: > 0 })
@@ -193,11 +198,13 @@ public sealed class WeeklyUsageTooltip
 
     public static string TrendDownText(double percent) => $"↓ {percent:0}%";
 
-    // 环比配色与 K 线一致：涨红跌绿
-    private static Brush TrendBrush(string trend) => new SolidColorBrush(
-        trend.StartsWith('↑') ? Color.FromRgb(0xF0, 0x6A, 0x6A) :
-        trend.StartsWith('↓') ? Color.FromRgb(0x53, 0xC8, 0x92) :
-        Color.FromRgb(0x9A, 0xA8, 0xA1));
+    // 环比配色与 K 线一致：涨红（Critical）跌绿（Success）
+    private static Brush TrendBrush(string trend) => trend switch
+    {
+        var t when t.StartsWith('↑') => Res("CriticalBrush"),
+        var t when t.StartsWith('↓') => Res("SuccessBrush"),
+        _ => Res("MutedBrush")
+    };
 
     private static string PeakText(WeeklyUsageSummary summary) => summary.PeakDate is null
         ? "-"

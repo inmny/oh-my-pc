@@ -12,8 +12,8 @@
         IsHitTestVisible="False">
     <Canvas x:Name="Stage" ClipToBounds="True">
         <Border x:Name="MessagePanel"
-                Background="{StaticResource OverlaySurfaceBrush}"
-                BorderBrush="{StaticResource BorderBrush}"
+                Background="{DynamicResource OverlaySurfaceBrush}"
+                BorderBrush="{DynamicResource BorderBrush}"
                 BorderThickness="1"
                 CornerRadius="4"
                 Padding="16,11"
@@ -26,7 +26,7 @@
                 <Border x:Name="SeverityBar" CornerRadius="2" />
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock x:Name="TitleText" FontWeight="Bold" Margin="0,0,10,0" VerticalAlignment="Center" />
-                    <TextBlock x:Name="BodyText" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                    <TextBlock x:Name="BodyText" Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center" TextWrapping="Wrap" />
                 </StackPanel>
             </Grid>
         </Border>

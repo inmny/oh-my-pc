@@ -36,7 +36,6 @@ public partial class App : System.Windows.Application
         DispatcherUnhandledException += (_, args) =>
             _host?.Services.GetService<ILogger<App>>()?.LogCritical(args.Exception, "界面操作失败");
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
-        LiveCharts.Configure(config => config.AddDefaultTheme(requestedTheme: LvcThemeKind.Dark));
 
         _showWindowEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
         _instanceMutex = new Mutex(true, MutexName, out _ownsMutex);
@@ -62,6 +61,7 @@ public partial class App : System.Windows.Application
             builder.Logging.AddProvider(new DailyFileLoggerProvider());
             builder.Services.AddSingleton<LocalizationService>();
             builder.Services.AddSingleton<ITextLocalizer>(services => services.GetRequiredService<LocalizationService>());
+            builder.Services.AddSingleton<ThemeService>();
             builder.Services.AddOhMyPcInfrastructure();
             builder.Services.AddSingleton<StartupRegistrationService>();
             builder.Services.AddSingleton<DesktopNotificationSink>();
@@ -93,6 +93,8 @@ public partial class App : System.Windows.Application
             var localization = _host.Services.GetRequiredService<LocalizationService>();
             Resources["Localization"] = localization;
             localization.Apply(settings.Language);
+            // 主题先于界面创建应用，图表与窗口首帧即为正确配色
+            _host.Services.GetRequiredService<ThemeService>().Apply(settings.Theme);
             _host.Services.GetRequiredService<DesktopNotificationSink>().Start();
             _host.Services.GetRequiredService<TrayService>().Start();
             _host.Services.GetRequiredService<DanmakuOverlayService>().Start();

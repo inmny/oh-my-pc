@@ -7,15 +7,15 @@
         Height="760"
         MinWidth="940"
         MinHeight="620"
-        Background="{StaticResource BackgroundBrush}"
+        Background="{DynamicResource BackgroundBrush}"
         WindowStartupLocation="CenterScreen">
-    <Grid Background="{StaticResource BackgroundBrush}">
+    <Grid Background="{DynamicResource BackgroundBrush}">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="190" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
-        <Border Grid.Column="0" Background="{StaticResource SidebarBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
+        <Border Grid.Column="0" Background="{DynamicResource SidebarBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,1,0">
             <Grid Margin="16,20,16,16">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -24,11 +24,11 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <StackPanel>
-                    <TextBlock Text="OH MY PC" FontSize="18" FontWeight="Bold" Foreground="{StaticResource AccentBrush}" />
+                    <TextBlock Text="OH MY PC" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" />
                     <TextBlock Text="{DynamicResource App_Subtitle}" Style="{StaticResource MutedText}" Margin="0,3,0,0" />
                 </StackPanel>
                 <StackPanel Grid.Row="3">
-                    <Border Background="{StaticResource PanelRaisedBrush}" CornerRadius="4" Padding="10,8" Margin="0,0,0,10">
+                    <Border Background="{DynamicResource PanelRaisedBrush}" CornerRadius="4" Padding="10,8" Margin="0,0,0,10">
                         <StackPanel>
                             <TextBlock Text="{Binding StatusText}" FontWeight="SemiBold" TextWrapping="Wrap" />
                             <TextBlock Text="{Binding LastUpdated}" Style="{StaticResource MutedText}" FontSize="11" Margin="0,3,0,0" />
@@ -55,7 +55,7 @@
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
                         <TabPanel Grid.Column="0" IsItemsHost="True" VerticalAlignment="Top" Margin="0,92,0,0" />
-                        <Border Grid.Column="1" Background="{StaticResource BackgroundBrush}">
+                        <Border Grid.Column="1" Background="{DynamicResource BackgroundBrush}">
                             <ContentPresenter x:Name="PART_SelectedContentHost"
                                               Content="{TemplateBinding SelectedContent}"
                                               ContentTemplate="{TemplateBinding SelectedContentTemplate}"
@@ -89,7 +89,7 @@
             </TabItem>
         </TabControl>
 
-        <Border Grid.Column="1" Height="3" VerticalAlignment="Top" Background="{StaticResource AccentBrush}" Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
+        <Border Grid.Column="1" Height="3" VerticalAlignment="Top" Background="{DynamicResource AccentBrush}" Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}}">
             <ProgressBar IsIndeterminate="True" Height="3" />
         </Border>
 
@@ -100,16 +100,16 @@
                 Margin="12,10,0,0"
                 Padding="14,8"
                 CornerRadius="6"
-                Background="{StaticResource AccentBrush}"
+                Background="{DynamicResource AccentBrush}"
                 Visibility="{Binding HasUpdateBanner, Converter={StaticResource BooleanToVisibilityConverter}}">
             <StackPanel Orientation="Horizontal">
-                <TextBlock Text="{Binding UpdateBannerText}" Foreground="#14261C" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding UpdateBannerText}" Foreground="{DynamicResource OnAccentBrush}" FontWeight="SemiBold" VerticalAlignment="Center" />
                 <Button Content="{DynamicResource Update_InstallNow}"
                         Command="{Binding UpdateNowCommand}"
                         Margin="14,0,0,0"
                         Padding="10,4"
-                        Background="#14261C"
-                        Foreground="{StaticResource AccentBrush}"
+                        Background="{DynamicResource OnAccentBrush}"
+                        Foreground="{DynamicResource AccentBrush}"
                         BorderThickness="0" />
             </StackPanel>
         </Border>
