@@ -1,7 +1,8 @@
 <UserControl x:Class="OhMyPc.App.Views.ProxyView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:domain="clr-namespace:OhMyPc.Core.Domain;assembly=OhMyPc.Core">
+             xmlns:domain="clr-namespace:OhMyPc.Core.Domain;assembly=OhMyPc.Core"
+             xmlns:viewModels="clr-namespace:OhMyPc.App.ViewModels">
     <Grid Margin="28,0,28,28">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -37,7 +38,7 @@
                     <Button Content="{DynamicResource Proxy_Redetect}" Command="{Binding Proxy.RedetectCommand}" />
                 </StackPanel>
                 <TextBlock Text="{Binding Proxy.InstallStatusText}"
-                           Foreground="{StaticResource CriticalBrush}"
+                           Foreground="{DynamicResource CriticalBrush}"
                            FontSize="12"
                            TextWrapping="Wrap"
                            Margin="0,10,0,0"
@@ -67,13 +68,13 @@
                     <Ellipse Width="9" Height="9" Margin="0,0,8,0" VerticalAlignment="Center">
                         <Ellipse.Style>
                             <Style TargetType="Ellipse">
-                                <Setter Property="Fill" Value="{StaticResource MutedBrush}" />
+                                <Setter Property="Fill" Value="{DynamicResource MutedBrush}" />
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding Proxy.IsRunning}" Value="True">
-                                        <Setter Property="Fill" Value="{StaticResource AccentBrush}" />
+                                        <Setter Property="Fill" Value="{DynamicResource SuccessBrush}" />
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding Proxy.IsStarting}" Value="True">
-                                        <Setter Property="Fill" Value="{StaticResource AmberBrush}" />
+                                        <Setter Property="Fill" Value="{DynamicResource AmberBrush}" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
@@ -92,7 +93,7 @@
 
         <TextBlock Grid.Row="1"
                    Text="{Binding Proxy.OperationText}"
-                   Foreground="{StaticResource CriticalBrush}"
+                   Foreground="{DynamicResource CriticalBrush}"
                    FontSize="12"
                    Margin="0,0,0,10"
                    VerticalAlignment="Bottom"
@@ -105,24 +106,32 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <Border Background="{StaticResource PanelRaisedBrush}" CornerRadius="4" Padding="3">
+            <Border Background="{DynamicResource PanelRaisedBrush}" CornerRadius="4" Padding="3">
                 <StackPanel Orientation="Horizontal">
                     <RadioButton Content="{DynamicResource Proxy_ProvidersTab}"
                                  GroupName="ProxySection"
                                  Style="{StaticResource SegmentButton}"
-                                 IsChecked="{Binding Proxy.IsProvidersSelected, Mode=TwoWay}" />
+                                 IsChecked="{Binding Proxy.IsProvidersSelected, Mode=OneWay}"
+                                 Command="{Binding Proxy.SelectSegmentCommand}"
+                                 CommandParameter="{x:Static viewModels:ProxySegment.Providers}" />
                     <RadioButton Content="{DynamicResource Proxy_UnifiedTab}"
                                  GroupName="ProxySection"
                                  Style="{StaticResource SegmentButton}"
-                                 IsChecked="{Binding Proxy.IsUnifiedSelected, Mode=TwoWay}" />
+                                 IsChecked="{Binding Proxy.IsUnifiedSelected, Mode=OneWay}"
+                                 Command="{Binding Proxy.SelectSegmentCommand}"
+                                 CommandParameter="{x:Static viewModels:ProxySegment.Unified}" />
                     <RadioButton Content="{DynamicResource Proxy_RoutingTab}"
                                  GroupName="ProxySection"
                                  Style="{StaticResource SegmentButton}"
-                                 IsChecked="{Binding Proxy.IsRoutingSelected, Mode=TwoWay}" />
+                                 IsChecked="{Binding Proxy.IsRoutingSelected, Mode=OneWay}"
+                                 Command="{Binding Proxy.SelectSegmentCommand}"
+                                 CommandParameter="{x:Static viewModels:ProxySegment.Routing}" />
                     <RadioButton Content="{DynamicResource Proxy_ClientsTab}"
                                  GroupName="ProxySection"
                                  Style="{StaticResource SegmentButton}"
-                                 IsChecked="{Binding Proxy.IsClientsSelected, Mode=TwoWay}" />
+                                 IsChecked="{Binding Proxy.IsClientsSelected, Mode=OneWay}"
+                                 Command="{Binding Proxy.SelectSegmentCommand}"
+                                 CommandParameter="{x:Static viewModels:ProxySegment.Clients}" />
                 </StackPanel>
             </Border>
             <Button Grid.Column="2"
@@ -142,7 +151,7 @@
             <Border Grid.Column="0" Style="{StaticResource PanelCard}" Padding="10">
                 <DockPanel>
                     <Border DockPanel.Dock="Bottom"
-                            BorderBrush="{StaticResource BorderBrush}"
+                            BorderBrush="{DynamicResource BorderBrush}"
                             BorderThickness="0,1,0,0"
                             Margin="0,10,0,0"
                             Padding="0,10,0,0">
@@ -160,8 +169,8 @@
                                    StaysOpen="False"
                                    AllowsTransparency="True"
                                    PopupAnimation="Fade">
-                                <Border Background="{StaticResource PanelRaisedBrush}"
-                                        BorderBrush="{StaticResource BorderBrush}"
+                                <Border Background="{DynamicResource PanelRaisedBrush}"
+                                        BorderBrush="{DynamicResource BorderBrush}"
                                         BorderThickness="1"
                                         CornerRadius="6"
                                         Padding="4"
@@ -336,7 +345,7 @@
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsInconsistent}" Value="True">
                                                     <Setter Property="Visibility" Value="Visible" />
-                                                    <Setter Property="Foreground" Value="{StaticResource AmberBrush}" />
+                                                    <Setter Property="Foreground" Value="{DynamicResource AmberBrush}" />
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
@@ -421,7 +430,7 @@
                                         <TextBlock Text="{Binding NameText}" FontWeight="SemiBold" FontSize="14" />
                                         <TextBlock Text="{Binding ConfigFileText}"
                                                    Style="{StaticResource MutedText}"
-                                                   Foreground="{StaticResource AccentBrush}"
+                                                   Foreground="{DynamicResource AccentBrush}"
                                                    HorizontalAlignment="Right"
                                                    VerticalAlignment="Center" />
                                     </Grid>

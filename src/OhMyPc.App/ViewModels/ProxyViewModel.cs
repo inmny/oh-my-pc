@@ -27,10 +27,7 @@ public sealed partial class ProxyViewModel : ObservableObject
     private ProxyConfigSnapshot? _snapshot;
     private ProxyProviderItemViewModel? _selectedProvider;
     private ProxyUnifiedModelRowViewModel? _selectedUnifiedModel;
-    private bool _isProvidersSelected = true;
-    private bool _isUnifiedSelected;
-    private bool _isRoutingSelected;
-    private bool _isClientsSelected;
+    private ProxySegment _segment = ProxySegment.Providers;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsNotInstalled))]
@@ -133,21 +130,22 @@ public sealed partial class ProxyViewModel : ObservableObject
 
     public bool HasSelectedProvider => SelectedProvider is not null;
 
-    public bool IsProvidersSelected { get => _isProvidersSelected; set => SetSegment(ref _isProvidersSelected, value); }
+    public bool IsProvidersSelected => _segment == ProxySegment.Providers;
+    public bool IsUnifiedSelected => _segment == ProxySegment.Unified;
+    public bool IsRoutingSelected => _segment == ProxySegment.Routing;
+    public bool IsClientsSelected => _segment == ProxySegment.Clients;
 
-    public bool IsUnifiedSelected
+    [RelayCommand]
+    private void SelectSegment(ProxySegment segment)
     {
-        get => _isUnifiedSelected;
-        set
-        {
-            SetSegment(ref _isUnifiedSelected, value);
-            if (value) RebuildUnifiedModels();
-        }
+        if (_segment == segment) return;
+        _segment = segment;
+        OnPropertyChanged(nameof(IsProvidersSelected));
+        OnPropertyChanged(nameof(IsUnifiedSelected));
+        OnPropertyChanged(nameof(IsRoutingSelected));
+        OnPropertyChanged(nameof(IsClientsSelected));
+        if (segment == ProxySegment.Unified) RebuildUnifiedModels();
     }
-
-    public bool IsRoutingSelected { get => _isRoutingSelected; set => SetSegment(ref _isRoutingSelected, value); }
-
-    public bool IsClientsSelected { get => _isClientsSelected; set => SetSegment(ref _isClientsSelected, value); }
 
     /// <summary>客户端同步范围写入磁盘后发出，供 MainViewModel 同步内存中的设置。</summary>
     public event Action<ProxyClientKind, ProxyClientSyncScope>? ScopePersisted;
@@ -606,15 +604,6 @@ public sealed partial class ProxyViewModel : ObservableObject
     private bool CanProcessAction() => IsInstalled && !InstallBusy;
     private bool CanSaveConfig() => IsInstalled;
 
-    private void SetSegment(ref bool field, bool value)
-    {
-        if (!SetProperty(ref field, value) || !value) return;
-        OnPropertyChanged(nameof(IsProvidersSelected));
-        OnPropertyChanged(nameof(IsUnifiedSelected));
-        OnPropertyChanged(nameof(IsRoutingSelected));
-        OnPropertyChanged(nameof(IsClientsSelected));
-    }
-
     private void StatusRefreshed(object? sender, EventArgs e) =>
         System.Windows.Application.Current.Dispatcher.InvokeAsync(() => ApplyStatus(_status.Last));
 
@@ -882,3 +871,12 @@ public sealed record UnifiedModelEdit(
     IReadOnlyList<string> ThinkingLevels,
     IReadOnlyList<string> InputModalities,
     IReadOnlyList<string> OutputModalities);
+
+/// <summary>模型代理页的二级分段。</summary>
+public enum ProxySegment
+{
+    Providers,
+    Unified,
+    Routing,
+    Clients
+}
