@@ -12,6 +12,9 @@ public sealed class LocalToolDetector
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         ".zcode", "cli", "db", "db.sqlite");
     public string ZcodeDatabaseDirectory => Path.GetDirectoryName(ZcodeDatabasePath)!;
+    public string WorkbuddyProjectsRoot { get; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+        ".workbuddy", "projects");
 
     public IReadOnlyList<string> DetectClients() => _roots
         .Where(pair => pair.Value.Any(Directory.Exists))
@@ -47,7 +50,8 @@ public sealed class LocalToolDetector
             ["cline"] = [Path.Combine(home, ".cline", "data", "sessions"), Path.Combine(appData, "Code", "User", "globalStorage", "saoudrizwan.claude-dev", "tasks")],
             ["copilot"] = [Path.Combine(home, ".copilot"), Path.Combine(appData, "GitHub Copilot")],
             ["zed"] = [Path.Combine(localData, "Zed")],
-            ["kiro"] = [Path.Combine(home, ".kiro"), Path.Combine(appData, "Kiro")]
+            ["kiro"] = [Path.Combine(home, ".kiro"), Path.Combine(appData, "Kiro")],
+            ["workbuddy"] = [Path.Combine(home, ".workbuddy", "projects")]
         };
     }
 }

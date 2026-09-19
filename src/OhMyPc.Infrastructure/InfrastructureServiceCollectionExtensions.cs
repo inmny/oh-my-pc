@@ -51,6 +51,7 @@ public static class InfrastructureServiceCollectionExtensions
         services.AddSingleton<TokscaleClient>();
         services.AddSingleton<DshUsageCollector>();
         services.AddSingleton<ZcodeUsageCollector>();
+        services.AddSingleton<WorkbuddyUsageCollector>();
         services.AddSingleton<ILocalUsageCollector, CompositeLocalUsageCollector>();
         services.AddSingleton<LocalUsageRefreshService>();
         services.AddHostedService<LocalUsageWorker>();

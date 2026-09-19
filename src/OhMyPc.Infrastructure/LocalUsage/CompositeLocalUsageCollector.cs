@@ -6,7 +6,8 @@ namespace OhMyPc.Infrastructure.LocalUsage;
 public sealed class CompositeLocalUsageCollector(
     TokscaleClient tokscale,
     DshUsageCollector dsh,
-    ZcodeUsageCollector zcode) : ILocalUsageCollector
+    ZcodeUsageCollector zcode,
+    WorkbuddyUsageCollector workbuddy) : ILocalUsageCollector
 {
     public async Task<IReadOnlyList<UsageObservation>> CollectAsync(
         bool fullHistory,
@@ -15,7 +16,8 @@ public sealed class CompositeLocalUsageCollector(
         var tokscaleTask = tokscale.CollectAsync(fullHistory, cancellationToken);
         var dshTask = dsh.CollectAsync(fullHistory, cancellationToken);
         var zcodeTask = zcode.CollectAsync(fullHistory, cancellationToken);
-        await Task.WhenAll(tokscaleTask, dshTask, zcodeTask);
-        return [.. await tokscaleTask, .. await dshTask, .. await zcodeTask];
+        var workbuddyTask = workbuddy.CollectAsync(fullHistory, cancellationToken);
+        await Task.WhenAll(tokscaleTask, dshTask, zcodeTask, workbuddyTask);
+        return [.. await tokscaleTask, .. await dshTask, .. await zcodeTask, .. await workbuddyTask];
     }
 }
