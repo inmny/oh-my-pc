@@ -727,13 +727,15 @@ public sealed partial class ProxyClientSyncItemViewModel(ProxyClientKind client,
     {
         ProxyClientKind.Zcode => "zcode",
         ProxyClientKind.Opencode => "opencode",
+        ProxyClientKind.Workbuddy => "workbuddy",
         _ => "dsh"
     };
 
     public bool ConfigFileExists => Client switch
     {
-        ProxyClientKind.Zcode => File.Exists(ProxyClientPaths.ZcodeDesktopConfig) || File.Exists(ProxyClientPaths.ZcodeCliConfig),
+        ProxyClientKind.Zcode => File.Exists(ProxyClientPaths.ZcodeProviderConfig),
         ProxyClientKind.Opencode => File.Exists(ProxyClientPaths.OpencodeConfig),
+        ProxyClientKind.Workbuddy => File.Exists(ProxyClientPaths.WorkbuddyModels),
         _ => File.Exists(ProxyClientPaths.DshSettings)
     };
 

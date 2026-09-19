@@ -10,11 +10,11 @@ namespace OhMyPc.Infrastructure.CliProxy;
 
 /// <summary>
 /// 把 CLIProxyAPI 的模型定义写入 zcode / opencode / dsh 的配置文件。
-/// 全部采用结构化编辑：只改本应用管理的键，保留各客户端配置中的其余字段（zcode.* 元数据、费用配置等）。
+/// 全部采用结构化编辑：只改本应用管理的键，保留各客户端配置中的其余字段（费用配置、用户自建规则等）。
 /// </summary>
 public sealed class CliProxyClientConfigurator(
-    string? zcodeDesktopConfig = null,
-    string? zcodeCliConfig = null,
+    string? zcodeProviderConfig = null,
+    string? workbuddyModels = null,
     string? opencodeConfig = null,
     string? dshSettings = null,
     string? dshCredentials = null) : IClientConfigurator
@@ -23,11 +23,14 @@ public sealed class CliProxyClientConfigurator(
     public const string DefaultDshEnvName = "CLIPROXYAPI_API_KEY";
     private const string DisplayName = "CLIProxyAPI";
 
-    private readonly string _zcodeDesktopConfig = zcodeDesktopConfig ?? ProxyClientPaths.ZcodeDesktopConfig;
-    private readonly string _zcodeCliConfig = zcodeCliConfig ?? ProxyClientPaths.ZcodeCliConfig;
+    private readonly string _zcodeProviderConfig = zcodeProviderConfig ?? ProxyClientPaths.ZcodeProviderConfig;
+    private readonly string _workbuddyModels = workbuddyModels ?? ProxyClientPaths.WorkbuddyModels;
     private readonly string _opencodeConfig = opencodeConfig ?? ProxyClientPaths.OpencodeConfig;
     private readonly string _dshSettings = dshSettings ?? ProxyClientPaths.DshSettings;
     private readonly string _dshCredentials = dshCredentials ?? ProxyClientPaths.DshCredentials;
+
+    private const string WorkbuddyVendorMarker = "oh-my-pc";
+    private const int WorkbuddyMaxOutputTokens = 128000;
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
@@ -36,6 +39,7 @@ public sealed class CliProxyClientConfigurator(
         ProxyClientKind.Zcode => SyncZcodeAsync(plan, cancellationToken),
         ProxyClientKind.Opencode => SyncOpencodeAsync(plan, cancellationToken),
         ProxyClientKind.Dsh => SyncDshAsync(plan, cancellationToken),
+        ProxyClientKind.Workbuddy => SyncWorkbuddyAsync(plan, cancellationToken),
         _ => throw new ArgumentOutOfRangeException(nameof(plan), plan.Client, "未知的客户端类型")
     };
 
@@ -44,131 +48,289 @@ public sealed class CliProxyClientConfigurator(
 
     private async Task<ClientSyncResult> SyncZcodeAsync(ClientSyncPlan plan, CancellationToken cancellationToken)
     {
-        if (!DirectoryExistsFor(_zcodeDesktopConfig) && !DirectoryExistsFor(_zcodeCliConfig))
-            throw new InvalidOperationException("未找到 zcode 配置目录（~/.zcode）。");
+        if (!DirectoryExistsFor(_zcodeProviderConfig))
+            throw new InvalidOperationException("未找到 zcode 配置目录（~/.zcode/v2）。");
 
-        return plan.Upstreams.Count > 0
-            ? await SyncZcodeDirectAsync(plan, cancellationToken)
-            : await SyncZcodeGatewayAsync(plan, cancellationToken);
-    }
+        // zcode 桌面端 3.12+ 的个人 Provider 唯一来源是 provider_config.json（schemaVersion 1），
+        // 旧的 v2/config.json 与 cli/config.json 的 provider 段已不被读取。
+        var root = await ReadJsonObjectAsync(_zcodeProviderConfig, cancellationToken);
+        NormalizeProviderConfigSkeleton(root);
+        var config = (JsonObject)root["config"]!;
+        var rules = (JsonArray)config["providerConfigRules"]!["providerRules"]!;
+        var modelRules = (JsonArray)config["modelConfigRules"]!["providerModelRules"]!;
 
-    private async Task<ClientSyncResult> SyncZcodeGatewayAsync(ClientSyncPlan plan, CancellationToken cancellationToken)
-    {
-        // zcode 只支持 anthropic 与 openai 两种 npm 包：Claude 上游走 anthropic，
-        // Codex 与 OpenAI 兼容上游都走 openai（兼容上游由 CPA 完成 Responses→Chat 协议转换）。
-        var anthropicModels = plan.Models.Where(model => model.Kind == ProxyProviderKind.Claude).Select(model => model.Config).ToList();
-        var openaiModels = plan.Models.Where(model => model.Kind != ProxyProviderKind.Claude).Select(model => model.Config).ToList();
+        var (removedIds, modelCount, providerId) = plan.Upstreams.Count > 0
+            ? SyncZcodeDirectRules(rules, modelRules, plan)
+            : SyncZcodeGatewayRules(rules, modelRules, plan);
 
-        string? anthropicId = null;
-        string? openaiId = null;
-        var written = new List<string>();
-        foreach (var (path, isCliConfig) in new[]
-                 {
-                     (_zcodeDesktopConfig, false),
-                     (_zcodeCliConfig, true)
-                 })
+        // 默认模型选择指向被移除的 provider 时一并清掉，避免悬空；其模型覆盖规则同步清理
+        if (removedIds.Count > 0)
         {
-            var root = await ReadJsonObjectAsync(path, cancellationToken);
-            var providers = GetOrCreateObject(root, "provider");
-            anthropicId ??= DetectProviderId(providers, plan.BaseUrl, "anthropic") ?? plan.ProviderId;
-            openaiId ??= DetectProviderId(providers, plan.BaseUrl, "openai") ?? $"{plan.ProviderId}-codex";
-
-            // 两个协议组都无条件 upsert：组内模型为空时清空既有模型，客户端可见模型始终等于本次同步范围。
-            var anthropicProvider = UpsertZcodeProvider(providers, anthropicId, "anthropic", "CLIProxyAPI", plan.ApiKey, plan.BaseUrl, isCliConfig, ProxyProviderKind.Claude);
-            SyncZcodeModels(anthropicProvider, anthropicModels);
-            var openaiProvider = UpsertZcodeProvider(providers, openaiId, "openai", "CLIProxyAPI Codex", plan.ApiKey, EnsureV1(plan.BaseUrl), isCliConfig, ProxyProviderKind.Codex);
-            SyncZcodeModels(openaiProvider, openaiModels);
-            RemoveDanglingDefaultModel(root, RemoveDirectEntries(providers, keep: []));
-
-            await WriteAsync(path, root, cancellationToken);
-            written.Add(path);
-        }
-        return BuildResult(anthropicId ?? plan.ProviderId, written, plan);
-    }
-
-    /// <summary>直连模式：每个上游一个 provider 条目，指向其真实地址与密钥，模型用上游真实名。</summary>
-    private async Task<ClientSyncResult> SyncZcodeDirectAsync(ClientSyncPlan plan, CancellationToken cancellationToken)
-    {
-        var written = new List<string>();
-        foreach (var (path, isCliConfig) in new[]
-                 {
-                     (_zcodeDesktopConfig, false),
-                     (_zcodeCliConfig, true)
-                 })
-        {
-            var root = await ReadJsonObjectAsync(path, cancellationToken);
-            var providers = GetOrCreateObject(root, "provider");
-            var keep = new List<string>();
-            foreach (var upstream in plan.Upstreams)
+            foreach (var node in modelRules.Where(node => node is JsonObject entry
+                     && removedIds.Contains((string?)entry["providerId"] ?? "")).ToList())
             {
-                var kind = upstream.Kind == ProxyProviderKind.Claude ? "anthropic" : "openai";
-                var id = DirectId(upstream.Key);
-                keep.Add(id);
-                // openai 系 SDK 只拼 /responses，需要带 /v1 的地址；anthropic SDK 自拼 /v1/messages，用上游根地址
-                var baseUrl = upstream.Kind == ProxyProviderKind.Claude ? upstream.BaseUrl.TrimEnd('/') : EnsureV1(upstream.BaseUrl);
-                var provider = UpsertZcodeProvider(providers, id, kind, upstream.DisplayName, upstream.ApiKey, baseUrl, isCliConfig, upstream.Kind);
-                SyncZcodeModels(provider, [.. upstream.Models.Select(WithoutAlias)]);
+                modelRules.Remove(node);
             }
-            RemoveDanglingDefaultModel(root, RemoveGatewayEntries(providers, plan.BaseUrl));
-            RemoveDanglingDefaultModel(root, RemoveDirectEntries(providers, keep));
-
-            await WriteAsync(path, root, cancellationToken);
-            written.Add(path);
+            if (config["defaultModelSelection"] is JsonObject selection
+                && (string?)selection["providerId"] is { } selected
+                && removedIds.Contains(selected))
+            {
+                config.Remove("defaultModelSelection");
+            }
         }
-        return BuildResult("direct", written, plan);
+
+        await WriteAsync(_zcodeProviderConfig, root, cancellationToken);
+        return new ClientSyncResult { WrittenFiles = [_zcodeProviderConfig], ProviderId = providerId, ModelCount = modelCount };
     }
 
-    private static JsonObject UpsertZcodeProvider(
-        JsonObject providers, string providerId, string kind, string displayName, string apiKey, string baseUrl, bool isCliConfig,
-        ProxyProviderKind providerKind = ProxyProviderKind.Codex)
+    /// <summary>补齐 provider_config.json 的必需骨架；缺失的键按 zcode 的 schema 默认值创建。</summary>
+    private static void NormalizeProviderConfigSkeleton(JsonObject root)
     {
-        var provider = GetOrCreateObject(providers, providerId);
-        provider["name"] = displayName;
-        provider["kind"] = kind;
-        provider["source"] = "custom";
-        provider["enabled"] = true;
-        if (isCliConfig)
+        if ((int?)root["schemaVersion"] is null) root["schemaVersion"] = 1;
+        if (root["config"] is not JsonObject config) root["config"] = config = new JsonObject();
+        if (config["providerConfigRules"] is not JsonObject rulesConfig) config["providerConfigRules"] = rulesConfig = new JsonObject();
+        if (rulesConfig["providerRules"] is not JsonArray rules) rulesConfig["providerRules"] = rules = new JsonArray();
+        if (config["modelConfigRules"] is not JsonObject modelConfig) config["modelConfigRules"] = modelConfig = new JsonObject();
+        if (modelConfig["providerModelRules"] is not JsonArray providerModelRules) modelConfig["providerModelRules"] = providerModelRules = new JsonArray();
+        if (modelConfig["manualProviderModelRules"] is not JsonArray) modelConfig["manualProviderModelRules"] = new JsonArray();
+    }
+
+    /// <summary>网关模式：Claude 上游一组 anthropic-messages（根地址），其余上游经 CPA 统一一组 openai-responses（/v1）。</summary>
+    private (IReadOnlyList<string> Removed, int ModelCount, string ProviderId) SyncZcodeGatewayRules(
+        JsonArray rules, JsonArray modelRules, ClientSyncPlan plan)
+    {
+        var anthropicModels = plan.Models.Where(model => model.Kind == ProxyProviderKind.Claude).Select(model => model.Config).ToList();
+        var responsesModels = plan.Models.Where(model => model.Kind != ProxyProviderKind.Claude).Select(model => model.Config).ToList();
+
+        var anthropicId = DetectRuleId(rules, plan.BaseUrl, "anthropic-messages") ?? plan.ProviderId;
+        var responsesId = DetectRuleId(rules, plan.BaseUrl, "openai-responses") ?? $"{plan.ProviderId}-codex";
+
+        UpsertZcodeRule(rules, anthropicId, DisplayName, plan.ApiKey, "anthropic-messages", plan.BaseUrl,
+            anthropicModels.Select(model => model.GetId()).ToList());
+        UpsertZcodeRule(rules, responsesId, $"{DisplayName} Codex", plan.ApiKey, "openai-responses", EnsureV1(plan.BaseUrl),
+            responsesModels.Select(model => model.GetId()).ToList());
+        SyncZcodeModelRules(modelRules, anthropicId, anthropicModels);
+        SyncZcodeModelRules(modelRules, responsesId, responsesModels);
+
+        // 两个网关组之外：全部 direct 条目移除（全部→指定切换后不再可用）；指向网关的其余旧条目一并清理
+        var gatewayBase = plan.BaseUrl.TrimEnd('/');
+        var removed = RemoveRules(rules, rule =>
         {
-            // OpenAI 兼容上游走 chat/completions：用 openai-compatible npm 包，其余按协议原生包
-            provider["apiFormat"] = providerKind switch
+            var id = (string?)rule["providerId"];
+            if (id is null || id == anthropicId || id == responsesId) return false;
+            return id.StartsWith("direct-", StringComparison.Ordinal) || IsGatewayRule(rule, gatewayBase);
+        });
+        return (removed, plan.Models.Select(model => model.Config.GetId()).Distinct(StringComparer.OrdinalIgnoreCase).Count(), anthropicId);
+    }
+
+    /// <summary>直连模式：每个上游一个 provider 规则，指向其真实地址与密钥，模型用上游真实名。</summary>
+    private (IReadOnlyList<string> Removed, int ModelCount, string ProviderId) SyncZcodeDirectRules(
+        JsonArray rules, JsonArray modelRules, ClientSyncPlan plan)
+    {
+        var keep = new List<string>();
+        foreach (var upstream in plan.Upstreams)
+        {
+            var id = DirectId(upstream.Key);
+            keep.Add(id);
+            // anthropic SDK 自拼 /v1/messages 用根地址；openai 系端点在 /v1 下，必须自带 /v1
+            var baseUrl = upstream.Kind == ProxyProviderKind.Claude ? upstream.BaseUrl.TrimEnd('/') : EnsureV1(upstream.BaseUrl);
+            var apiType = upstream.Kind switch
             {
                 ProxyProviderKind.Claude => "anthropic-messages",
-                ProxyProviderKind.OpenAiCompatible => "openai-completions",
+                ProxyProviderKind.OpenAiCompatible => "openai-chat-completions",
                 _ => "openai-responses"
             };
-            provider["defaultKind"] = kind;
-            provider["npm"] = providerKind switch
-            {
-                ProxyProviderKind.Claude => "@ai-sdk/anthropic",
-                ProxyProviderKind.OpenAiCompatible => "@ai-sdk/openai-compatible",
-                _ => "@ai-sdk/openai"
-            };
+            var modelIds = upstream.Models.Select(model => WithoutAlias(model).GetId()).ToList();
+            UpsertZcodeRule(rules, id, upstream.DisplayName, upstream.ApiKey, apiType, baseUrl, modelIds);
+            SyncZcodeModelRules(modelRules, id, [.. upstream.Models.Select(WithoutAlias)]);
         }
-        var options = GetOrCreateObject(provider, "options");
-        options["apiKey"] = apiKey;
-        // anthropic SDK 在 baseURL 后拼 /v1/messages，用根地址；openai 系 SDK 拼 /responses 或 /chat/completions，必须自带 /v1
-        options["baseURL"] = kind == "openai" ? baseUrl.TrimEnd('/') : baseUrl;
-        return provider;
+
+        // 未保留的 direct 条目与指向网关的旧条目一并移除
+        var gatewayBase = plan.BaseUrl.TrimEnd('/');
+        var removed = RemoveRules(rules, rule =>
+        {
+            var id = (string?)rule["providerId"];
+            if (id is null) return false;
+            return id.StartsWith("direct-", StringComparison.Ordinal) && !keep.Contains(id) || IsGatewayRule(rule, gatewayBase);
+        });
+        return (removed, BuildResult("direct", [], plan).ModelCount, "direct");
     }
 
-    /// <summary>模型列表以本次同步为准：upsert 计划内模型，移除不在计划内的旧条目；计划为空时移除整个 models 键。</summary>
-    private static void SyncZcodeModels(JsonObject provider, IReadOnlyList<ProxyModelConfig> models)
+    /// <summary>按 zcode 的 providerRules 结构插入或覆盖一条规则；模型清单以本次同步为准。</summary>
+    private static void UpsertZcodeRule(
+        JsonArray rules, string providerId, string displayName, string apiKey, string apiType, string baseUrl,
+        IReadOnlyList<string> modelIds)
     {
-        if (models.Count == 0)
-        {
-            provider.Remove("models");
-            return;
-        }
-        var target = GetOrCreateObject(provider, "models");
+        var rule = rules.FirstOrDefault(node =>
+            node is JsonObject entry && (string?)entry["providerId"] == providerId) as JsonObject ?? new JsonObject();
+        if (rule["providerId"] is null) rules.Add(rule);
+        rule["providerId"] = providerId;
+        rule["providerName"] = displayName;
+        rule["enabled"] = true;
+        var config = GetOrCreateObject(rule, "config");
+        config["group"] = "standard-personal";
+        var access = GetOrCreateObject(config, "access");
+        access["type"] = "api-key";
+        access["apiKey"] = apiKey;
+        var api = GetOrCreateObject(config, "api");
+        api["type"] = apiType;
+        api["baseUrl"] = baseUrl;
+        config["personalModelIds"] = ToNode(modelIds);
+        config["modelOrder"] = ToNode(modelIds);
+    }
+
+    /// <summary>上下文长度覆盖规则与本次同步的模型对齐：计划内模型写入，计划外模型的规则清掉。</summary>
+    private static void SyncZcodeModelRules(
+        JsonArray modelRules, string providerId, IReadOnlyList<ProxyModelConfig> models)
+    {
+        var ids = models.Select(model => model.GetId()).ToHashSet(StringComparer.Ordinal);
         foreach (var model in models)
         {
-            UpsertModel(target, model.GetId(), ProxyMappers.ToZcodeModel(model));
+            if (model.MaxContextLength is not { } contextWindow) continue;
+            JsonObject entry = modelRules.FirstOrDefault(node =>
+                node is JsonObject candidate
+                && (string?)candidate["providerId"] == providerId
+                && (string?)candidate["modelId"] == model.GetId()) as JsonObject ?? new JsonObject();
+            if (entry["modelId"] is null)
+            {
+                modelRules.Add(entry);
+                entry["modelId"] = model.GetId();
+                entry["providerId"] = providerId;
+            }
+            var config = GetOrCreateObject(entry, "config");
+            var properties = GetOrCreateObject(config, "properties");
+            properties["contextWindow"] = contextWindow;
         }
-        var keep = models.Select(model => model.GetId()).ToHashSet(StringComparer.Ordinal);
-        foreach (var id in target.Select(pair => pair.Key).ToList())
+        foreach (var node in modelRules.Where(node => node is JsonObject entry
+                 && (string?)entry["providerId"] == providerId
+                 && !ids.Contains((string?)entry["modelId"] ?? "")).ToList())
         {
-            if (!keep.Contains(id)) target.Remove(id);
+            modelRules.Remove(node);
         }
+    }
+
+    /// <summary>移除命中的规则，返回被移除规则的 providerId。</summary>
+    private static List<string> RemoveRules(JsonArray rules, Func<JsonObject, bool> shouldRemove)
+    {
+        var removed = new List<string>();
+        foreach (var node in rules.Where(node => node is JsonObject rule && shouldRemove(rule)).ToList())
+        {
+            removed.Add((string?)node["providerId"] ?? "");
+            rules.Remove(node);
+        }
+        return removed;
+    }
+
+    /// <summary>规则指向网关地址（根地址或 /v1 均算）。</summary>
+    private static bool IsGatewayRule(JsonObject rule, string gatewayBase) =>
+        (string?)rule["config"]?["api"]?["baseUrl"] is { } baseUrl
+        && baseUrl.TrimEnd('/').StartsWith(gatewayBase, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>查找已指向本网关且协议一致的既有规则，复用其 providerId（如旧 cpa-gui 条目）。</summary>
+    private static string? DetectRuleId(JsonArray rules, string baseUrl, string apiType)
+    {
+        foreach (var node in rules)
+        {
+            if (node is not JsonObject rule) continue;
+            if ((string?)rule["config"]?["api"]?["type"] != apiType) continue;
+            var existing = (string?)rule["config"]?["api"]?["baseUrl"];
+            if (existing is not null && existing.TrimEnd('/').StartsWith(baseUrl.TrimEnd('/'), StringComparison.OrdinalIgnoreCase))
+            {
+                return (string?)rule["providerId"];
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// workbuddy 的自定义模型是扁平清单（~/.workbuddy/models.json），协议固定为 OpenAI Chat Completions：
+    /// url 填基础地址（workbuddy 自动补 /chat/completions）。本应用写入的条目以 vendor "oh-my-pc"
+    /// 标识所有权：重同步时移除计划外条目，用户手加的条目原样保留。
+    /// </summary>
+    private async Task<ClientSyncResult> SyncWorkbuddyAsync(ClientSyncPlan plan, CancellationToken cancellationToken)
+    {
+        if (!DirectoryExistsFor(_workbuddyModels))
+            throw new InvalidOperationException("未找到 workbuddy 配置目录（~/.workbuddy）。");
+
+        var models = await ReadJsonArrayAsync(_workbuddyModels, cancellationToken);
+        var entries = new List<(string Id, JsonObject Entry)>();
+        if (plan.Upstreams.Count > 0)
+        {
+            foreach (var upstream in plan.Upstreams)
+            {
+                // chat 端点在 /v1 之下，基础地址必须自带 /v1；模型用上游真实名
+                var url = EnsureV1(upstream.BaseUrl);
+                foreach (var model in upstream.Models.Select(WithoutAlias))
+                {
+                    entries.Add((model.GetId(), BuildWorkbuddyEntry(model, url, upstream.ApiKey)));
+                }
+            }
+        }
+        else
+        {
+            // 网关模式保留别名作为客户端侧 id；兼容上游由 CPA 完成协议转换，全部走网关 /v1
+            var url = EnsureV1(plan.BaseUrl);
+            foreach (var model in plan.Models.Select(model => model.Config).DistinctBy(model => model.GetId(), StringComparer.Ordinal))
+            {
+                entries.Add((model.GetId(), BuildWorkbuddyEntry(model, url, plan.ApiKey)));
+            }
+        }
+
+        var keep = entries.Select(entry => entry.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var node in models.Where(node => node is JsonObject entry
+                 && (string?)entry["vendor"] == WorkbuddyVendorMarker
+                 && !keep.Contains((string?)entry["id"] ?? "")).ToList())
+        {
+            models.Remove(node);
+        }
+        foreach (var (id, entry) in entries)
+        {
+            entry["id"] = id;
+            var index = models.ToList().FindIndex(node =>
+                node is JsonObject existing && (string?)existing["id"] == id);
+            if (index >= 0) models[index] = entry;
+            else models.Add(entry);
+        }
+
+        await WriteArrayAsync(_workbuddyModels, models, cancellationToken);
+        return new ClientSyncResult
+        {
+            WrittenFiles = [_workbuddyModels],
+            ProviderId = plan.Upstreams.Count > 0 ? "direct" : plan.ProviderId,
+            ModelCount = keep.Count
+        };
+    }
+
+    private static JsonObject BuildWorkbuddyEntry(ProxyModelConfig model, string url, string apiKey)
+    {
+        var id = model.GetId();
+        var entry = new JsonObject
+        {
+            ["id"] = id,
+            ["name"] = id,
+            ["vendor"] = WorkbuddyVendorMarker,
+            ["url"] = url,
+            ["apiKey"] = apiKey,
+            ["supportsToolCall"] = true,
+            ["supportsImages"] = model.InputModalities.Contains("image"),
+            ["supportsReasoning"] = ProxyMappers.OrderLevels(model.ThinkingLevels).Count > 0,
+            ["maxOutputTokens"] = WorkbuddyMaxOutputTokens
+        };
+        if (model.MaxContextLength is { } contextWindow) entry["maxInputTokens"] = contextWindow;
+        return entry;
+    }
+
+    /// <summary>workbuddy 的 models.json 是顶层模型数组；缺失或空文件按空清单处理。</summary>
+    private static async Task<JsonArray> ReadJsonArrayAsync(string path, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(path)) return new JsonArray();
+        var node = JsonNode.Parse(await File.ReadAllTextAsync(path, cancellationToken));
+        return node switch
+        {
+            JsonArray array => array,
+            null => new JsonArray(),
+            _ => throw new InvalidOperationException($"客户端配置文件格式异常：{path}")
+        };
     }
 
     private async Task<ClientSyncResult> SyncOpencodeAsync(ClientSyncPlan plan, CancellationToken cancellationToken)
@@ -534,5 +696,10 @@ public sealed class CliProxyClientConfigurator(
     {
         // ToJsonString 无异步版本，文件很小，直接写。
         await Task.Run(() => ConfigFileSafety.WriteAllText(path, root.ToJsonString(JsonOptions)), cancellationToken);
+    }
+
+    private static async Task WriteArrayAsync(string path, JsonArray array, CancellationToken cancellationToken)
+    {
+        await Task.Run(() => ConfigFileSafety.WriteAllText(path, array.ToJsonString(JsonOptions)), cancellationToken);
     }
 }

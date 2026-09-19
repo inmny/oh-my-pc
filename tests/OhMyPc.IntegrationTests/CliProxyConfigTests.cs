@@ -88,17 +88,15 @@ public sealed class CliProxyConfigTests : IDisposable
         Assert.Equal(["high"], added.Models[0].ThinkingLevels);
     }
 
+
     [Fact]
     public async Task SyncZcode_SplitsProtocolsAndRemovesMisplacedModels()
     {
         Directory.CreateDirectory(_root);
-        var desktopConfig = Path.Combine(_root, "zcode-config.json");
-        var cliConfig = Path.Combine(_root, "zcode-cli-config.json");
-        await File.WriteAllTextAsync(desktopConfig, BuildZcodeFixture());
-        await File.WriteAllTextAsync(cliConfig, BuildZcodeCliFixture());
+        var providerConfig = Path.Combine(_root, "provider_config.json");
+        await File.WriteAllTextAsync(providerConfig, BuildZcodeFixture());
         var configurator = new CliProxyClientConfigurator(
-            zcodeDesktopConfig: desktopConfig,
-            zcodeCliConfig: cliConfig,
+            zcodeProviderConfig: providerConfig,
             opencodeConfig: Path.Combine(_root, "missing-opencode.json"),
             dshSettings: Path.Combine(_root, "missing-dsh.yaml"),
             dshCredentials: Path.Combine(_root, "missing-cred.yaml"));
@@ -111,42 +109,130 @@ public sealed class CliProxyConfigTests : IDisposable
             ApiKey = "abc",
             Models =
             [
-                // Claude 上游模型 → anthropic provider；Codex 上游模型 → openai(responses) provider
-                new ClientSyncModel(new ProxyModelConfig { Name = "glm-5.3", Alias = "GLM-5.3", ThinkingLevels = ["max"] }, ProxyProviderKind.Claude),
-                new ClientSyncModel(new ProxyModelConfig { Name = "gpt-5.6-terra", ThinkingLevels = ["low", "max"] }, ProxyProviderKind.Codex)
+                // Claude 上游模型 → anthropic-messages 规则；Codex 上游模型 → openai-responses 规则
+                new ClientSyncModel(new ProxyModelConfig { Name = "glm-5.3", Alias = "GLM-5.3", ThinkingLevels = ["max"], MaxContextLength = 200000 }, ProxyProviderKind.Claude),
+                new ClientSyncModel(new ProxyModelConfig { Name = "gpt-5.6-terra", ThinkingLevels = ["low", "max"], MaxContextLength = 100000 }, ProxyProviderKind.Codex)
             ]
         });
 
         Assert.Equal("cpa-gui", result.ProviderId);
         Assert.Equal(2, result.ModelCount);
-        var root = JsonNode.Parse(await File.ReadAllTextAsync(desktopConfig))!.AsObject();
-        // 默认模型不再由同步管理：客户端里已有的选择原样保留
-        Assert.Equal("cpa-gui/gpt-5.6-terra", (string?)root["model"]);
+        var config = JsonNode.Parse(await File.ReadAllTextAsync(providerConfig))!["config"]!.AsObject();
+        var rules = config["providerConfigRules"]!["providerRules"]!.AsArray();
 
-        var anthropic = root["provider"]!["cpa-gui"]!.AsObject();
-        Assert.Equal("anthropic", (string?)anthropic["kind"]);
-        Assert.Equal("abc", (string?)anthropic["options"]!["apiKey"]);
-        var anthropicModels = anthropic["models"]!.AsObject();
-        Assert.NotNull(anthropicModels["GLM-5.3"]);
-        Assert.Null(anthropicModels["gpt-5.6-terra"]);
-        // 早期错误同步塞进 anthropic 条目的 codex 模型应被清理
-        Assert.Null(anthropicModels["gpt-5.6-luna"]);
+        // anthropic-messages 规则复用旧 cpa-gui 条目：别名作为模型 id，计划外模型被清理
+        var anthropic = rules.OfType<JsonObject>().Single(rule => (string?)rule["providerId"] == "cpa-gui");
+        Assert.Equal("abc", (string?)anthropic["config"]!["access"]!["apiKey"]);
+        Assert.Equal("http://127.0.0.1:8317", (string?)anthropic["config"]!["api"]!["baseUrl"]);
+        Assert.Equal(["GLM-5.3"], anthropic["config"]!["personalModelIds"]!.AsArray().Select(node => (string?)node));
 
-        var codex = root["provider"]!["cli-proxy-api-codex"]!.AsObject();
-        Assert.Equal("openai", (string?)codex["kind"]);
-        // openai SDK 只在 baseURL 后拼 /responses，必须带 /v1；anthropic SDK 自拼 /v1/messages，用根地址
-        Assert.Equal("http://127.0.0.1:8317/v1", (string?)codex["options"]!["baseURL"]);
-        Assert.Equal("http://127.0.0.1:8317", (string?)anthropic["options"]!["baseURL"]);
-        var codexModel = codex["models"]!["gpt-5.6-terra"]!.AsObject();
-        Assert.Equal(["low", "max"],
-            codexModel["reasoning"]!["variants"]!.AsArray().Select(node => (string?)node));
+        var responses = rules.OfType<JsonObject>().Single(rule => (string?)rule["providerId"] == "cli-proxy-api-codex");
+        // openai 系端点在 /v1 下：responses 规则的地址必须自带 /v1
+        Assert.Equal("openai-responses", (string?)responses["config"]!["api"]!["type"]);
+        Assert.Equal("http://127.0.0.1:8317/v1", (string?)responses["config"]!["api"]!["baseUrl"]);
+        Assert.Equal(["gpt-5.6-terra"], responses["config"]!["personalModelIds"]!.AsArray().Select(node => (string?)node));
 
-        var untouched = root["provider"]!["builtin:bigmodel"]!.AsObject();
-        Assert.Equal("https://open.bigmodel.cn/api/anthropic", (string?)untouched["options"]!["baseURL"]);
+        // 模型上下文覆盖规则同步更新；计划外的 luna 规则被清理
+        var modelRules = config["modelConfigRules"]!["providerModelRules"]!.AsArray();
+        Assert.Equal(200000, (int?)modelRules.OfType<JsonObject>().Single(rule => (string?)rule["modelId"] == "GLM-5.3")["config"]!["properties"]!["contextWindow"]);
+        Assert.Equal(100000, (int?)modelRules.OfType<JsonObject>().Single(rule => (string?)rule["modelId"] == "gpt-5.6-terra")["config"]!["properties"]!["contextWindow"]);
+        Assert.Null(modelRules.OfType<JsonObject>().FirstOrDefault(rule => (string?)rule["modelId"] == "gpt-5.6-luna"));
 
-        var cliRoot = JsonNode.Parse(await File.ReadAllTextAsync(cliConfig))!.AsObject();
-        Assert.Equal("anthropic-messages", (string?)cliRoot["provider"]!["cpa-gui"]!["apiFormat"]);
-        Assert.Equal("openai-responses", (string?)cliRoot["provider"]!["cli-proxy-api-codex"]!["apiFormat"]);
+        // 用户自建规则与文件其余键（排序、手动规则、默认模型选择）原样保留
+        Assert.NotNull(rules.OfType<JsonObject>().FirstOrDefault(rule => (string?)rule["providerId"] == "my-own-provider"));
+        Assert.Equal(["cpa-gui"], config["providerOrder"]!.AsArray().Select(node => (string?)node));
+        Assert.NotNull(config["modelConfigRules"]!["manualProviderModelRules"]);
+        Assert.Equal("my-own-provider", (string?)config["defaultModelSelection"]!["providerId"]);
+    }
+
+    [Fact]
+    public async Task SyncWorkbuddy_GatewayFlattensModelsAndPreservesUserEntries()
+    {
+        Directory.CreateDirectory(_root);
+        var modelsFile = Path.Combine(_root, "models.json");
+        await File.WriteAllTextAsync(modelsFile, """
+            [
+              { "id": "stale-model", "name": "stale-model", "vendor": "oh-my-pc", "url": "http://127.0.0.1:8317/v1", "apiKey": "old" },
+              { "id": "user-model", "name": "user-model", "vendor": "user", "url": "https://api.example.com/v1", "apiKey": "own" }
+            ]
+            """);
+        var modelsPath = modelsFile;
+        var configurator = new CliProxyClientConfigurator(
+            zcodeProviderConfig: Path.Combine(_root, "missing-zcode.json"),
+            workbuddyModels: modelsPath,
+            opencodeConfig: Path.Combine(_root, "missing-opencode.json"),
+            dshSettings: Path.Combine(_root, "missing-dsh.yaml"),
+            dshCredentials: Path.Combine(_root, "missing-cred.yaml"));
+
+        var result = await configurator.SyncAsync(new ClientSyncPlan
+        {
+            Client = ProxyClientKind.Workbuddy,
+            ProviderId = "cli-proxy-api",
+            BaseUrl = "http://127.0.0.1:8317",
+            ApiKey = "123456",
+            Models =
+            [
+                // 网关模式保留别名作为客户端侧 id
+                new ClientSyncModel(
+                    new ProxyModelConfig { Name = "glm-5.3", Alias = "GLM-5.3", ThinkingLevels = ["max"], MaxContextLength = 200000, InputModalities = ["text", "image"] },
+                    ProxyProviderKind.Claude),
+                new ClientSyncModel(
+                    new ProxyModelConfig { Name = "gpt-5.6-terra", Alias = "GLM-5.3" },
+                    ProxyProviderKind.Codex)
+            ]
+        });
+
+        Assert.Equal("cli-proxy-api", result.ProviderId);
+        // 两个上游的别名相同 → 扁平清单按 id 去重
+        Assert.Equal(1, result.ModelCount);
+        var models = JsonNode.Parse(await File.ReadAllTextAsync(modelsFile))!.AsArray();
+        var ours = models.OfType<JsonObject>().Where(entry => (string?)entry["vendor"] == "oh-my-pc").ToList();
+        var entry = Assert.Single(ours);
+        Assert.Equal("GLM-5.3", (string?)entry["id"]);
+        Assert.Equal("http://127.0.0.1:8317/v1", (string?)entry["url"]);
+        Assert.Equal("123456", (string?)entry["apiKey"]);
+        Assert.True((bool?)entry["supportsReasoning"]);
+        Assert.True((bool?)entry["supportsImages"]);
+        Assert.Equal(200000, (int?)entry["maxInputTokens"]);
+        // 计划外的本应用条目移除，用户手加的条目原样保留
+        Assert.Null(models.OfType<JsonObject>().FirstOrDefault(item => (string?)item["id"] == "stale-model"));
+        Assert.NotNull(models.OfType<JsonObject>().FirstOrDefault(item => (string?)item["id"] == "user-model"));
+        _ = modelsPath;
+    }
+
+    [Fact]
+    public async Task SyncWorkbuddy_DirectWritesUpstreamUrlsAndKeys()
+    {
+        Directory.CreateDirectory(_root);
+        var modelsFile = Path.Combine(_root, "models.json");
+        var configurator = new CliProxyClientConfigurator(
+            zcodeProviderConfig: Path.Combine(_root, "missing-zcode.json"),
+            workbuddyModels: modelsFile,
+            opencodeConfig: Path.Combine(_root, "missing-opencode.json"),
+            dshSettings: Path.Combine(_root, "missing-dsh.yaml"),
+            dshCredentials: Path.Combine(_root, "missing-cred.yaml"));
+
+        var result = await configurator.SyncAsync(new ClientSyncPlan
+        {
+            Client = ProxyClientKind.Workbuddy,
+            BaseUrl = "http://127.0.0.1:8317",
+            Upstreams =
+            [
+                new ClientSyncUpstream(
+                    "or-key|https://openrouter.ai/api/v1", "OpenRouter", "https://openrouter.ai/api/v1", "sk-or",
+                    ProxyProviderKind.OpenAiCompatible,
+                    [new ProxyModelConfig { Name = "org/kimi-k2", Alias = "kimi" }])
+            ]
+        });
+
+        Assert.Equal("direct", result.ProviderId);
+        Assert.Equal(1, result.ModelCount);
+        var models = JsonNode.Parse(await File.ReadAllTextAsync(modelsFile))!.AsArray();
+        var entry = Assert.Single(models.OfType<JsonObject>());
+        // 直连用上游真实地址、密钥与真实模型名（别名剥离）；chat 端点在 /v1 下
+        Assert.Equal("org/kimi-k2", (string?)entry["id"]);
+        Assert.Equal("https://openrouter.ai/api/v1", (string?)entry["url"]);
+        Assert.Equal("sk-or", (string?)entry["apiKey"]);
     }
 
     [Fact]
@@ -158,8 +244,7 @@ public sealed class CliProxyConfigTests : IDisposable
         await File.WriteAllTextAsync(settings, BuildDshFixture());
         await File.WriteAllTextAsync(credentials, "version: 1\nrefs:\n  OTHER_KEY: 'x'\n");
         var configurator = new CliProxyClientConfigurator(
-            zcodeDesktopConfig: Path.Combine(_root, "missing-zcode.json"),
-            zcodeCliConfig: Path.Combine(_root, "missing-zcode-cli.json"),
+            zcodeProviderConfig: Path.Combine(_root, "missing-zcode.json"),
             opencodeConfig: Path.Combine(_root, "missing-opencode.json"),
             dshSettings: settings,
             dshCredentials: credentials);
@@ -234,8 +319,7 @@ public sealed class CliProxyConfigTests : IDisposable
         Directory.CreateDirectory(_root);
         var opencodeConfig = Path.Combine(_root, "opencode.json");
         var configurator = new CliProxyClientConfigurator(
-            zcodeDesktopConfig: Path.Combine(_root, "missing-zcode.json"),
-            zcodeCliConfig: Path.Combine(_root, "missing-zcode-cli.json"),
+            zcodeProviderConfig: Path.Combine(_root, "missing-zcode.json"),
             opencodeConfig: opencodeConfig,
             dshSettings: Path.Combine(_root, "missing-dsh.yaml"),
             dshCredentials: Path.Combine(_root, "missing-cred.yaml"));
@@ -311,17 +395,15 @@ public sealed class CliProxyConfigTests : IDisposable
         Assert.DoesNotContain("openai-compatibility:", cleared);
     }
 
+
     [Fact]
     public async Task SyncZcode_DirectOpenAiCompatibleUsesChatProtocol()
     {
         Directory.CreateDirectory(_root);
-        var desktopConfig = Path.Combine(_root, "zcode-config.json");
-        var cliConfig = Path.Combine(_root, "zcode-cli-config.json");
-        await File.WriteAllTextAsync(desktopConfig, "{}");
-        await File.WriteAllTextAsync(cliConfig, "{}");
+        var providerConfig = Path.Combine(_root, "provider_config.json");
+        await File.WriteAllTextAsync(providerConfig, "{}");
         var configurator = new CliProxyClientConfigurator(
-            zcodeDesktopConfig: desktopConfig,
-            zcodeCliConfig: cliConfig,
+            zcodeProviderConfig: providerConfig,
             opencodeConfig: Path.Combine(_root, "missing-opencode.json"),
             dshSettings: Path.Combine(_root, "missing-dsh.yaml"),
             dshCredentials: Path.Combine(_root, "missing-cred.yaml"));
@@ -338,14 +420,13 @@ public sealed class CliProxyConfigTests : IDisposable
         });
 
         Assert.Equal(1, result.ModelCount);
-        var cliRoot = JsonNode.Parse(await File.ReadAllTextAsync(cliConfig))!.AsObject();
-        var provider = cliRoot["provider"]![CliProxyClientConfigurator.DirectId("or-key|https://openrouter.ai/api/v1")]!.AsObject();
-        // 兼容上游走 chat/completions：apiFormat/npm 换成兼容系，地址带 /v1，模型用真实名
-        Assert.Equal("openai-completions", (string?)provider["apiFormat"]);
-        Assert.Equal("@ai-sdk/openai-compatible", (string?)provider["npm"]);
-        Assert.Equal("https://openrouter.ai/api/v1", (string?)provider["options"]!["baseURL"]);
-        Assert.NotNull(provider["models"]!["org/kimi-k2"]);
-        Assert.Null(provider["models"]!["kimi-k2"]);
+        var rules = JsonNode.Parse(await File.ReadAllTextAsync(providerConfig))!["config"]!["providerConfigRules"]!["providerRules"]!.AsArray();
+        var rule = rules.OfType<JsonObject>().Single();
+        // 兼容上游走 chat/completions 协议：地址带 /v1，模型用真实名
+        Assert.Equal(CliProxyClientConfigurator.DirectId("or-key|https://openrouter.ai/api/v1"), (string?)rule["providerId"]);
+        Assert.Equal("openai-chat-completions", (string?)rule["config"]!["api"]!["type"]);
+        Assert.Equal("https://openrouter.ai/api/v1", (string?)rule["config"]!["api"]!["baseUrl"]);
+        Assert.Equal(["org/kimi-k2"], rule["config"]!["personalModelIds"]!.AsArray().Select(node => (string?)node));
     }
 
     [Fact]
@@ -367,8 +448,7 @@ public sealed class CliProxyConfigTests : IDisposable
             """);
         await File.WriteAllTextAsync(credentials, "version: 1\nrefs:\n  LEGACY_API_KEY: old\n");
         var configurator = new CliProxyClientConfigurator(
-            zcodeDesktopConfig: Path.Combine(_root, "missing-zcode.json"),
-            zcodeCliConfig: Path.Combine(_root, "missing-zcode-cli.json"),
+            zcodeProviderConfig: Path.Combine(_root, "missing-zcode.json"),
             opencodeConfig: Path.Combine(_root, "missing-opencode.json"),
             dshSettings: settings,
             dshCredentials: credentials);
@@ -398,22 +478,20 @@ public sealed class CliProxyConfigTests : IDisposable
         Assert.DoesNotContain("openai-responses", content);
     }
 
+
     [Fact]
     public async Task SyncZcode_SubsetScopeClearsEmptyProtocolGroup()
     {
         Directory.CreateDirectory(_root);
-        var desktopConfig = Path.Combine(_root, "zcode-config.json");
-        var cliConfig = Path.Combine(_root, "zcode-cli-config.json");
-        await File.WriteAllTextAsync(desktopConfig, BuildZcodeFixture());
-        await File.WriteAllTextAsync(cliConfig, BuildZcodeCliFixture());
+        var providerConfig = Path.Combine(_root, "provider_config.json");
+        await File.WriteAllTextAsync(providerConfig, BuildZcodeFixture());
         var configurator = new CliProxyClientConfigurator(
-            zcodeDesktopConfig: desktopConfig,
-            zcodeCliConfig: cliConfig,
+            zcodeProviderConfig: providerConfig,
             opencodeConfig: Path.Combine(_root, "missing-opencode.json"),
             dshSettings: Path.Combine(_root, "missing-dsh.yaml"),
             dshCredentials: Path.Combine(_root, "missing-cred.yaml"));
 
-        // 范围只含 Codex 上游：anthropic 组没有计划内模型，models 必须整体清空（条目保留）
+        // 范围只含 Codex 上游：anthropic-messages 规则保留但清单清空
         var result = await configurator.SyncAsync(new ClientSyncPlan
         {
             Client = ProxyClientKind.Zcode,
@@ -421,52 +499,77 @@ public sealed class CliProxyConfigTests : IDisposable
             BaseUrl = "http://127.0.0.1:8317",
             ApiKey = "abc",
             Models = [new ClientSyncModel(
-                new ProxyModelConfig { Name = "gpt-5.6-sol", Alias = "GPT-5.6-Sol" },
+                new ProxyModelConfig { Name = "gpt-5.6-sol", Alias = "GPT-5.6-Sol", MaxContextLength = 272000 },
                 ProxyProviderKind.Codex)]
         });
 
         Assert.Equal(1, result.ModelCount);
-        var root = JsonNode.Parse(await File.ReadAllTextAsync(desktopConfig))!.AsObject();
-        Assert.Equal("cpa-gui/gpt-5.6-terra", (string?)root["model"]);
-        var anthropic = root["provider"]!["cpa-gui"]!.AsObject();
-        Assert.Equal("anthropic", (string?)anthropic["kind"]);
-        Assert.Null(anthropic["models"]);
-        Assert.NotNull(root["provider"]!["cli-proxy-api-codex"]!["models"]!["GPT-5.6-Sol"]);
-
-        var cliRoot = JsonNode.Parse(await File.ReadAllTextAsync(cliConfig))!.AsObject();
-        Assert.Null(cliRoot["provider"]!["cpa-gui"]!["models"]);
+        var config = JsonNode.Parse(await File.ReadAllTextAsync(providerConfig))!["config"]!.AsObject();
+        var rules = config["providerConfigRules"]!["providerRules"]!.AsArray();
+        var anthropic = rules.OfType<JsonObject>().Single(rule => (string?)rule["providerId"] == "cpa-gui");
+        Assert.Empty(anthropic["config"]!["personalModelIds"]!.AsArray());
+        var responses = rules.OfType<JsonObject>().Single(rule => (string?)rule["providerId"] == "cli-proxy-api-codex");
+        Assert.Equal(["GPT-5.6-Sol"], responses["config"]!["personalModelIds"]!.AsArray().Select(node => (string?)node));
     }
+
 
     [Fact]
     public async Task SyncZcode_DirectWritesUpstreamEntriesAndRemovesGateway()
     {
         Directory.CreateDirectory(_root);
-        var desktopConfig = Path.Combine(_root, "zcode-config.json");
-        var cliConfig = Path.Combine(_root, "zcode-cli-config.json");
-        await File.WriteAllTextAsync(desktopConfig, """
+        var providerConfig = Path.Combine(_root, "provider_config.json");
+        await File.WriteAllTextAsync(providerConfig, """
             {
-              "provider": {
-                "cli-proxy-api-codex": {
-                  "kind": "openai",
-                  "options": { "apiKey": "123456", "baseURL": "http://127.0.0.1:8317/v1" }
+              "schemaVersion": 1,
+              "config": {
+                "providerConfigRules": {
+                  "providerRules": [
+                    {
+                      "providerId": "cli-proxy-api-codex",
+                      "providerName": "CLIProxyAPI Codex",
+                      "enabled": true,
+                      "config": {
+                        "group": "standard-personal",
+                        "access": { "type": "api-key", "apiKey": "123456" },
+                        "api": { "type": "openai-responses", "baseUrl": "http://127.0.0.1:8317/v1" }
+                      }
+                    },
+                    {
+                      "providerId": "cpa-gui",
+                      "providerName": "EasyCLIProxyAPI",
+                      "enabled": true,
+                      "config": {
+                        "group": "standard-personal",
+                        "access": { "type": "api-key", "apiKey": "123456" },
+                        "api": { "type": "anthropic-messages", "baseUrl": "http://127.0.0.1:8317" },
+                        "personalModelIds": ["GLM-5.3"],
+                        "modelOrder": ["GLM-5.3"]
+                      }
+                    },
+                    {
+                      "providerId": "my-own-provider",
+                      "providerName": "自建",
+                      "enabled": true,
+                      "config": {
+                        "group": "standard-personal",
+                        "access": { "type": "api-key", "apiKey": "own" },
+                        "api": { "type": "openai-chat-completions", "baseUrl": "https://api.example.com/v1" }
+                      }
+                    }
+                  ]
                 },
-                "cpa-gui": {
-                  "kind": "anthropic",
-                  "options": { "apiKey": "123456", "baseURL": "http://127.0.0.1:8317" },
-                  "models": { "GLM-5.3": { "name": "GLM-5.3" } }
+                "modelConfigRules": {
+                  "providerModelRules": [
+                    { "modelId": "GLM-5.3", "providerId": "cpa-gui", "config": { "properties": { "contextWindow": 40960 } } }
+                  ],
+                  "manualProviderModelRules": []
                 },
-                "builtin:bigmodel": {
-                  "kind": "anthropic",
-                  "options": { "baseURL": "https://open.bigmodel.cn/api/anthropic" }
-                }
-              },
-              "model": "cpa-gui/GLM-5.3"
+                "defaultModelSelection": { "providerId": "cpa-gui", "modelId": "GLM-5.3" }
+              }
             }
             """);
-        await File.WriteAllTextAsync(cliConfig, "{}");
         var configurator = new CliProxyClientConfigurator(
-            zcodeDesktopConfig: desktopConfig,
-            zcodeCliConfig: cliConfig,
+            zcodeProviderConfig: providerConfig,
             opencodeConfig: Path.Combine(_root, "missing-opencode.json"),
             dshSettings: Path.Combine(_root, "missing-dsh.yaml"),
             dshCredentials: Path.Combine(_root, "missing-cred.yaml"));
@@ -492,75 +595,75 @@ public sealed class CliProxyConfigTests : IDisposable
 
         Assert.Equal("direct", result.ProviderId);
         Assert.Equal(2, result.ModelCount);
-        var root = JsonNode.Parse(await File.ReadAllTextAsync(desktopConfig))!.AsObject();
-        // 网关条目被移除，无关条目保留；默认模型指向被移除的 cpa-gui → 悬空引用一并清除
-        Assert.Null(root["provider"]!["cpa-gui"]);
-        Assert.Null(root["provider"]!["cli-proxy-api-codex"]);
-        Assert.NotNull(root["provider"]!["builtin:bigmodel"]);
-        Assert.Null(root["model"]);
+        var config = JsonNode.Parse(await File.ReadAllTextAsync(providerConfig))!["config"]!.AsObject();
+        var rules = config["providerConfigRules"]!["providerRules"]!.AsArray();
+        // 网关规则被移除，用户自建规则保留；默认模型指向被移除的 cpa-gui → 悬空引用一并清除
+        Assert.Null(rules.OfType<JsonObject>().FirstOrDefault(rule => (string?)rule["providerId"] == "cpa-gui"));
+        Assert.Null(rules.OfType<JsonObject>().FirstOrDefault(rule => (string?)rule["providerId"] == "cli-proxy-api-codex"));
+        Assert.NotNull(rules.OfType<JsonObject>().FirstOrDefault(rule => (string?)rule["providerId"] == "my-own-provider"));
+        Assert.Null(config["defaultModelSelection"]);
+        // 被移除 provider 的模型覆盖规则一并清理
+        Assert.Empty(config["modelConfigRules"]!["providerModelRules"]!.AsArray());
 
         var claudeId = CliProxyClientConfigurator.DirectId(claudeKey);
         var codexId = CliProxyClientConfigurator.DirectId(codexKey);
-        var claude = root["provider"]![claudeId]!.AsObject();
-        Assert.Equal("anthropic", (string?)claude["kind"]);
-        Assert.Equal("智谱", (string?)claude["name"]);
-        Assert.Equal("glm-secret", (string?)claude["options"]!["apiKey"]);
+        var claude = rules.OfType<JsonObject>().Single(rule => (string?)rule["providerId"] == claudeId);
+        Assert.Equal("anthropic-messages", (string?)claude["config"]!["api"]!["type"]);
+        Assert.Equal("智谱", (string?)claude["providerName"]);
+        Assert.Equal("glm-secret", (string?)claude["config"]!["access"]!["apiKey"]);
         // anthropic SDK 自拼 /v1/messages：上游根地址原样写入；模型用上游真实名（别名剥离）
-        Assert.Equal("https://open.bigmodel.cn/api/anthropic", (string?)claude["options"]!["baseURL"]);
-        Assert.Null(claude["models"]!["GLM-5.3"]);
-        Assert.NotNull(claude["models"]!["glm-5.3"]);
+        Assert.Equal("https://open.bigmodel.cn/api/anthropic", (string?)claude["config"]!["api"]!["baseUrl"]);
+        Assert.Equal(["glm-5.3"], claude["config"]!["personalModelIds"]!.AsArray().Select(node => (string?)node));
 
-        var codex = root["provider"]![codexId]!.AsObject();
-        Assert.Equal("openai", (string?)codex["kind"]);
-        // openai SDK 只拼 /responses：input.im 的 responses 端点在 /v1 下
-        Assert.Equal("https://ai.input.im/v1", (string?)codex["options"]!["baseURL"]);
-        Assert.Equal("input-secret", (string?)codex["options"]!["apiKey"]);
-        Assert.NotNull(codex["models"]!["gpt-5.6-terra"]);
-        Assert.Null(codex["models"]!["GPT-5.6-Terra"]);
-
-        var cliRoot = JsonNode.Parse(await File.ReadAllTextAsync(cliConfig))!.AsObject();
-        Assert.Equal("anthropic-messages", (string?)cliRoot["provider"]![claudeId]!["apiFormat"]);
-        Assert.Equal("openai-responses", (string?)cliRoot["provider"]![codexId]!["apiFormat"]);
+        var codex = rules.OfType<JsonObject>().Single(rule => (string?)rule["providerId"] == codexId);
+        // openai 系端点在 /v1 下：input.im 的 responses 端点带 /v1
+        Assert.Equal("openai-responses", (string?)codex["config"]!["api"]!["type"]);
+        Assert.Equal("https://ai.input.im/v1", (string?)codex["config"]!["api"]!["baseUrl"]);
+        Assert.Equal("input-secret", (string?)codex["config"]!["access"]!["apiKey"]);
+        Assert.Equal(["gpt-5.6-terra"], codex["config"]!["personalModelIds"]!.AsArray().Select(node => (string?)node));
     }
+
 
     [Fact]
     public async Task SyncZcode_DirectResyncRemovesUncheckedUpstream()
     {
         Directory.CreateDirectory(_root);
-        var desktopConfig = Path.Combine(_root, "zcode-config.json");
-        var cliConfig = Path.Combine(_root, "zcode-cli-config.json");
-        await File.WriteAllTextAsync(desktopConfig, "{}");
-        await File.WriteAllTextAsync(cliConfig, "{}");
+        var providerConfig = Path.Combine(_root, "provider_config.json");
+        await File.WriteAllTextAsync(providerConfig, "{}");
         var configurator = new CliProxyClientConfigurator(
-            zcodeDesktopConfig: desktopConfig,
-            zcodeCliConfig: cliConfig,
+            zcodeProviderConfig: providerConfig,
             opencodeConfig: Path.Combine(_root, "missing-opencode.json"),
             dshSettings: Path.Combine(_root, "missing-dsh.yaml"),
             dshCredentials: Path.Combine(_root, "missing-cred.yaml"));
 
-        var first = new ProxyModelConfig { Name = "model-a" };
-        var second = new ProxyModelConfig { Name = "model-b" };
+        var first = new ProxyModelConfig { Name = "model-a", MaxContextLength = 100000 };
+        var second = new ProxyModelConfig { Name = "model-b", MaxContextLength = 200000 };
         var upstreamA = new ClientSyncUpstream("key-a|https://a.example.com", "A", "https://a.example.com", "secret-a", ProxyProviderKind.Codex, [first]);
         var upstreamB = new ClientSyncUpstream("key-b|https://b.example.com", "B", "https://b.example.com", "secret-b", ProxyProviderKind.Codex, [second]);
         await configurator.SyncAsync(new ClientSyncPlan { Client = ProxyClientKind.Zcode, BaseUrl = "http://127.0.0.1:8317", Upstreams = [upstreamA, upstreamB] });
 
         var idA = CliProxyClientConfigurator.DirectId("key-a|https://a.example.com");
         var idB = CliProxyClientConfigurator.DirectId("key-b|https://b.example.com");
-        var root = JsonNode.Parse(await File.ReadAllTextAsync(desktopConfig))!.AsObject();
-        Assert.NotNull(root["provider"]![idA]);
-        Assert.NotNull(root["provider"]![idB]);
+        var root = JsonNode.Parse(await File.ReadAllTextAsync(providerConfig))!.AsObject();
+        var rules = root["config"]!["providerConfigRules"]!["providerRules"]!.AsArray();
+        Assert.NotNull(rules.OfType<JsonObject>().FirstOrDefault(rule => (string?)rule["providerId"] == idA));
+        Assert.NotNull(rules.OfType<JsonObject>().FirstOrDefault(rule => (string?)rule["providerId"] == idB));
         // 默认模型指向 B
-        root["model"] = $"{idB}/model-b";
-        await File.WriteAllTextAsync(desktopConfig, root.ToJsonString());
+        root["config"]!["defaultModelSelection"] = new JsonObject { ["providerId"] = idB, ["modelId"] = "model-b" };
+        await File.WriteAllTextAsync(providerConfig, root.ToJsonString());
 
-        // 取消勾选 B 后重新同步：B 的条目与指向它的默认模型都要移除
+        // 取消勾选 B 后重新同步：B 的规则、模型覆盖规则与指向它的默认模型都要移除
         await configurator.SyncAsync(new ClientSyncPlan { Client = ProxyClientKind.Zcode, BaseUrl = "http://127.0.0.1:8317", Upstreams = [upstreamA] });
 
-        root = JsonNode.Parse(await File.ReadAllTextAsync(desktopConfig))!.AsObject();
-        Assert.NotNull(root["provider"]![idA]);
-        Assert.NotNull(root["provider"]![idA]!["models"]!["model-a"]);
-        Assert.Null(root["provider"]![idB]);
-        Assert.Null(root["model"]);
+        root = JsonNode.Parse(await File.ReadAllTextAsync(providerConfig))!.AsObject();
+        rules = root["config"]!["providerConfigRules"]!["providerRules"]!.AsArray();
+        var ruleA = rules.OfType<JsonObject>().Single(rule => (string?)rule["providerId"] == idA);
+        Assert.Equal(["model-a"], ruleA["config"]!["personalModelIds"]!.AsArray().Select(node => (string?)node));
+        Assert.Null(rules.OfType<JsonObject>().FirstOrDefault(rule => (string?)rule["providerId"] == idB));
+        var modelRules = root["config"]!["modelConfigRules"]!["providerModelRules"]!.AsArray();
+        Assert.NotNull(modelRules.OfType<JsonObject>().FirstOrDefault(rule => (string?)rule["modelId"] == "model-a"));
+        Assert.Null(modelRules.OfType<JsonObject>().FirstOrDefault(rule => (string?)rule["modelId"] == "model-b"));
+        Assert.Null(root["config"]!["defaultModelSelection"]);
     }
 
     [Fact]
@@ -579,8 +682,7 @@ public sealed class CliProxyConfigTests : IDisposable
             }
             """);
         var configurator = new CliProxyClientConfigurator(
-            zcodeDesktopConfig: Path.Combine(_root, "missing-zcode.json"),
-            zcodeCliConfig: Path.Combine(_root, "missing-zcode-cli.json"),
+            zcodeProviderConfig: Path.Combine(_root, "missing-zcode.json"),
             opencodeConfig: opencodeConfig,
             dshSettings: Path.Combine(_root, "missing-dsh.yaml"),
             dshCredentials: Path.Combine(_root, "missing-cred.yaml"));
@@ -618,8 +720,7 @@ public sealed class CliProxyConfigTests : IDisposable
         await File.WriteAllTextAsync(settings, BuildDshFixture());
         await File.WriteAllTextAsync(credentials, "version: 1\nrefs:\n  OTHER_KEY: 'x'\n");
         var configurator = new CliProxyClientConfigurator(
-            zcodeDesktopConfig: Path.Combine(_root, "missing-zcode.json"),
-            zcodeCliConfig: Path.Combine(_root, "missing-zcode-cli.json"),
+            zcodeProviderConfig: Path.Combine(_root, "missing-zcode.json"),
             opencodeConfig: Path.Combine(_root, "missing-opencode.json"),
             dshSettings: settings,
             dshCredentials: credentials);
@@ -741,38 +842,44 @@ public sealed class CliProxyConfigTests : IDisposable
     private static string BuildZcodeFixture() =>
         """
         {
-          "provider": {
-            "cpa-gui": {
-              "name": "EasyCLIProxyAPI",
-              "kind": "anthropic",
-              "source": "custom",
-              "enabled": true,
-              "options": { "apiKey": "123456", "baseURL": "http://127.0.0.1:8317" },
-              "models": {
-                "gpt-5.6-terra": {
-                  "name": "gpt-5.6-terra",
-                  "zcode": { "modified": true, "priority": 99 }
+          "schemaVersion": 1,
+          "config": {
+            "providerConfigRules": {
+              "providerRules": [
+                {
+                  "providerId": "cpa-gui",
+                  "providerName": "EasyCLIProxyAPI",
+                  "enabled": true,
+                  "config": {
+                    "group": "standard-personal",
+                    "access": { "type": "api-key", "apiKey": "123456" },
+                    "api": { "type": "anthropic-messages", "baseUrl": "http://127.0.0.1:8317" },
+                    "personalModelIds": ["gpt-5.6-terra", "gpt-5.6-luna"],
+                    "modelOrder": ["gpt-5.6-terra", "gpt-5.6-luna"]
+                  }
                 },
-                "gpt-5.6-luna": { "name": "gpt-5.6-luna" }
-              }
+                {
+                  "providerId": "my-own-provider",
+                  "providerName": "自建",
+                  "enabled": true,
+                  "config": {
+                    "group": "standard-personal",
+                    "access": { "type": "api-key", "apiKey": "own" },
+                    "api": { "type": "openai-chat-completions", "baseUrl": "https://api.example.com/v1" },
+                    "personalModelIds": ["own-model"],
+                    "modelOrder": ["own-model"]
+                  }
+                }
+              ]
             },
-            "builtin:bigmodel": {
-              "kind": "anthropic",
-              "options": { "baseURL": "https://open.bigmodel.cn/api/anthropic" }
-            }
-          },
-          "model": "cpa-gui/gpt-5.6-terra"
-        }
-        """;
-
-    private static string BuildZcodeCliFixture() =>
-        """
-        {
-          "provider": {
-            "cpa-gui": {
-              "kind": "anthropic",
-              "options": { "apiKey": "123456", "baseURL": "http://127.0.0.1:8317" }
-            }
+            "modelConfigRules": {
+              "providerModelRules": [
+                { "modelId": "gpt-5.6-luna", "providerId": "cpa-gui", "config": { "properties": { "contextWindow": 40960 } } }
+              ],
+              "manualProviderModelRules": []
+            },
+            "providerOrder": ["cpa-gui"],
+            "defaultModelSelection": { "providerId": "my-own-provider", "modelId": "own-model" }
           }
         }
         """;

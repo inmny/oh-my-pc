@@ -28,32 +28,6 @@ public sealed class ProxyMappersTests
     }
 
     [Fact]
-    public void ToZcodeModel_UsesAliasAsIdAndDefaults()
-    {
-        var model = new ProxyModelConfig { Name = "glm-5.3", Alias = "GLM-5.3", ThinkingLevels = ["low", "max"] };
-        var mapped = ProxyMappers.ToZcodeModel(model);
-
-        Assert.Equal("GLM-5.3", mapped["name"]);
-        var reasoning = (Dictionary<string, object?>)mapped["reasoning"]!;
-        Assert.Equal(true, reasoning["enabled"]);
-        Assert.Equal(new[] { "low", "max" }, (IEnumerable<string>)reasoning["variants"]!);
-        Assert.Equal("max", reasoning["defaultVariant"]);
-        var limit = (Dictionary<string, object?>)mapped["limit"]!;
-        Assert.Equal(272000L, limit["context"]);
-        Assert.Equal(128000L, limit["output"]);
-        var modalities = (Dictionary<string, object?>)mapped["modalities"]!;
-        Assert.Equal(["text", "image"], (IEnumerable<string>)modalities["input"]!);
-        Assert.Equal(["text"], (IEnumerable<string>)modalities["output"]!);
-    }
-
-    [Fact]
-    public void ToZcodeModel_WithoutLevels_OmitsReasoning()
-    {
-        var mapped = ProxyMappers.ToZcodeModel(new ProxyModelConfig { Name = "gpt-5.6-terra" });
-        Assert.DoesNotContain("reasoning", mapped.Keys);
-    }
-
-    [Fact]
     public void ToOpencodeModel_BuildsReasoningEffortVariants()
     {
         var model = new ProxyModelConfig

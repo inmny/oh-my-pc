@@ -19,7 +19,8 @@ public enum ProxyClientKind
 {
     Zcode,
     Opencode,
-    Dsh
+    Dsh,
+    Workbuddy
 }
 
 /// <summary>CLIProxyAPI 配置中受支持的取值范围与策略常量。</summary>

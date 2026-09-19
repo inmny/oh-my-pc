@@ -6,7 +6,6 @@ namespace OhMyPc.Core;
 public static class ProxyMappers
 {
     public const long DefaultContextWindow = 272000;
-    public const long ZcodeOutputLimit = 128000;
     public const long OpencodeOutputLimit = 131072;
     public const long DshMaxTokens = 128000;
 
@@ -46,35 +45,6 @@ public static class ProxyMappers
         if (cost.CacheRead is not null) result[cacheReadKey] = cost.CacheRead;
         if (cost.CacheWrite is not null) result[cacheWriteKey] = cost.CacheWrite;
         return result.Count == 0 ? null : result;
-    }
-
-    public static Dictionary<string, object?> ToZcodeModel(ProxyModelConfig model)
-    {
-        var result = new Dictionary<string, object?>
-        {
-            ["name"] = model.GetId(),
-            ["limit"] = new Dictionary<string, object?>
-            {
-                ["context"] = model.MaxContextLength ?? DefaultContextWindow,
-                ["output"] = ZcodeOutputLimit
-            },
-            ["modalities"] = new Dictionary<string, object?>
-            {
-                ["input"] = NormalizeModalities(model.InputModalities, isInput: true),
-                ["output"] = NormalizeModalities(model.OutputModalities, isInput: false)
-            }
-        };
-        var defaultVariant = GetDefaultVariant(model.ThinkingLevels);
-        if (defaultVariant is not null)
-        {
-            result["reasoning"] = new Dictionary<string, object?>
-            {
-                ["enabled"] = true,
-                ["variants"] = OrderLevels(model.ThinkingLevels),
-                ["defaultVariant"] = defaultVariant
-            };
-        }
-        return result;
     }
 
     public static Dictionary<string, object?> ToOpencodeModel(ProxyModelConfig model)

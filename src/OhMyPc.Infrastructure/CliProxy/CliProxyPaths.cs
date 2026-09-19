@@ -23,9 +23,11 @@ public static class ProxyClientPaths
 {
     public static string ZcodeHome { get; } = Path.Combine(CliProxyPaths.UserProfile, ".zcode");
 
-    public static string ZcodeDesktopConfig { get; } = Path.Combine(ZcodeHome, "v2", "config.json");
+    /// <summary>zcode 桌面端新版（3.12+）个人 Provider 配置：运行时唯一读取来源。</summary>
+    public static string ZcodeProviderConfig { get; } = Path.Combine(ZcodeHome, "v2", "provider_config.json");
 
-    public static string ZcodeCliConfig { get; } = Path.Combine(ZcodeHome, "cli", "config.json");
+    /// <summary>workbuddy 的用户级自定义模型清单（OpenAI Chat Completions 协议的扁平列表）。</summary>
+    public static string WorkbuddyModels { get; } = Path.Combine(CliProxyPaths.UserProfile, ".workbuddy", "models.json");
 
     public static string OpencodeConfig { get; } = Path.Combine(CliProxyPaths.UserProfile, ".config", "opencode", "opencode.json");
 
