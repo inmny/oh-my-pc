@@ -12,21 +12,46 @@
         IsHitTestVisible="False">
     <Canvas x:Name="Stage" ClipToBounds="True">
         <Border x:Name="MessagePanel"
-                Background="{DynamicResource OverlaySurfaceBrush}"
-                BorderBrush="{DynamicResource BorderBrush}"
+                CornerRadius="12"
                 BorderThickness="1"
-                CornerRadius="4"
-                Padding="16,11"
+                BorderBrush="{DynamicResource BorderBrush}"
                 MaxWidth="720">
             <Border.RenderTransform>
                 <TranslateTransform x:Name="Motion" />
             </Border.RenderTransform>
-            <Grid>
-                <Grid.ColumnDefinitions><ColumnDefinition Width="4" /><ColumnDefinition Width="14" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                <Border x:Name="SeverityBar" CornerRadius="2" />
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock x:Name="TitleText" FontWeight="Bold" Margin="0,0,10,0" VerticalAlignment="Center" />
-                    <TextBlock x:Name="BodyText" Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center" TextWrapping="Wrap" />
+            <Border.Background>
+                <SolidColorBrush x:Name="SurfaceTint" Color="{DynamicResource OverlaySurfaceColor}" Opacity="0.78" />
+            </Border.Background>
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="24" ShadowDepth="6" Direction="270" Opacity="0.45" RenderingBias="Performance" />
+            </Border.Effect>
+            <Grid Margin="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="4" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Border x:Name="SeverityBar" CornerRadius="12,0,0,12">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop x:Name="SeverityGradientTop" Color="#F06A6A" Offset="0" />
+                            <GradientStop x:Name="SeverityGradientBottom" Color="#F06A6A" Offset="1" />
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+                <StackPanel Grid.Column="1" Margin="12,9,16,10">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock x:Name="IconText"
+                                   FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets"
+                                   VerticalAlignment="Center" Margin="0,0,8,0" />
+                        <TextBlock x:Name="TitleText" FontWeight="Bold" VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis" MaxWidth="480" />
+                        <Border x:Name="SourceBadge" CornerRadius="4" Background="#26888888"
+                                Padding="6,1" Margin="10,0,0,0" VerticalAlignment="Center">
+                            <TextBlock x:Name="SourceText" FontSize="11" Opacity="0.85" />
+                        </Border>
+                    </StackPanel>
+                    <TextBlock x:Name="BodyText" TextWrapping="Wrap" MaxHeight="120"
+                               Foreground="{DynamicResource TextBrush}" Margin="0,4,0,0" />
                 </StackPanel>
             </Grid>
         </Border>
