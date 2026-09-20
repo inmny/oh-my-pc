@@ -80,8 +80,19 @@ public sealed class DshUsageCollector : ILocalUsageCollector
         }
 
         // DSH 升级后会话文件名为 session.v3.jsonl.zstd（旧版为 session.jsonl.zstd），通配同时覆盖两种
-        var paths = Directory
-            .EnumerateFiles(_sessionsRoot, "session*.jsonl.zstd", SearchOption.AllDirectories)
+        // 扫描范围含归档/备份目录（~/.dsh/sessions-*）：归档里有更早的历史会话。
+        // 同一会话（目录名 session-<uuid> 相同）可能同时存在于主目录与归档——按 uuid 去重，取修改时间最新的一份。
+        var dshHome = Path.GetDirectoryName(_sessionsRoot);
+        var roots = new List<string> { _sessionsRoot };
+        if (dshHome is not null && Directory.Exists(dshHome))
+        {
+            roots.AddRange(Directory.GetDirectories(dshHome, "sessions-*"));
+        }
+
+        var paths = roots.Where(Directory.Exists)
+            .SelectMany(root => Directory.EnumerateFiles(root, "session*.jsonl.zstd", SearchOption.AllDirectories))
+            .GroupBy(path => Path.GetFileName(Path.GetDirectoryName(path)!), StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.OrderByDescending(File.GetLastWriteTimeUtc).First())
             .Order(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var currentPaths = paths.ToHashSet(StringComparer.OrdinalIgnoreCase);
