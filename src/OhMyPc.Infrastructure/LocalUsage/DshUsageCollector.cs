@@ -79,8 +79,9 @@ public sealed class DshUsageCollector : ILocalUsageCollector
             }
         }
 
+        // DSH 升级后会话文件名为 session.v3.jsonl.zstd（旧版为 session.jsonl.zstd），通配同时覆盖两种
         var paths = Directory
-            .EnumerateFiles(_sessionsRoot, "session.jsonl.zstd", SearchOption.AllDirectories)
+            .EnumerateFiles(_sessionsRoot, "session*.jsonl.zstd", SearchOption.AllDirectories)
             .Order(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         var currentPaths = paths.ToHashSet(StringComparer.OrdinalIgnoreCase);
