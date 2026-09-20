@@ -11,7 +11,7 @@ public sealed class ZcodeUsageCollectorTests : IDisposable
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"oh-my-pc-zcode-{Guid.NewGuid():N}");
     private string DbPath => Path.Combine(_root, "db.sqlite");
 
-    public void SetUp() => Directory.CreateDirectory(_root);
+    private void SetUp() => Directory.CreateDirectory(_root);
 
     [Fact]
     public async Task Collector_AggregatesCompletedRowsByProviderAndModel()

@@ -127,7 +127,9 @@ public static class ModelMetadataParser
         array is null
             ? []
             : [.. array.Select(value => (string?)value)
-                .Where(value => value is not null && ProxyCatalog.Modalities.Contains(value!))];
+                .Where(value => value is not null)
+                .Select(value => value!)
+                .Where(value => ProxyCatalog.Modalities.Contains(value))];
 
     private static ProxyModelCost ParseCost(JsonObject? cost) => new()
     {

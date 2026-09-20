@@ -213,10 +213,10 @@ public sealed class CliProxyClientConfigurator(
     private static List<string> RemoveRules(JsonArray rules, Func<JsonObject, bool> shouldRemove)
     {
         var removed = new List<string>();
-        foreach (var node in rules.Where(node => node is JsonObject rule && shouldRemove(rule)).ToList())
+        foreach (var rule in rules.OfType<JsonObject>().Where(shouldRemove).ToList())
         {
-            removed.Add((string?)node["providerId"] ?? "");
-            rules.Remove(node);
+            removed.Add((string?)rule["providerId"] ?? "");
+            rules.Remove(rule);
         }
         return removed;
     }
