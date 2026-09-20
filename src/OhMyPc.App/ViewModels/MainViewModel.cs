@@ -99,6 +99,7 @@ public sealed partial class MainViewModel : ObservableObject
         VpnQuotaViewModel vpn,
         NotificationCenterViewModel notificationCenter,
         ProxyViewModel proxy,
+        DshViewModel dsh,
         LocalNotificationApiService localApi,
         StartupRegistrationService startup,
         UpdateCheckService updates,
@@ -114,8 +115,11 @@ public sealed partial class MainViewModel : ObservableObject
         Vpn = vpn;
         NotificationCenter = notificationCenter;
         Proxy = proxy;
+        Dsh = dsh;
         // 同步范围由 ProxyViewModel 落盘，这里把结果同步进内存设置，防止设置页保存时覆盖回旧值
         Proxy.ScopePersisted += (kind, scope) => Settings.ClientSyncScopes[kind.ToString()] = scope;
+        // 本机 DSH 端口同理：由 DshViewModel 在启动时回写设置
+        Dsh.LocalPortApplied += port => Settings.DshLocalPort = port;
         _localApi = localApi;
         _startup = startup;
         _text = text;
@@ -149,6 +153,7 @@ public sealed partial class MainViewModel : ObservableObject
     public VpnQuotaViewModel Vpn { get; }
     public NotificationCenterViewModel NotificationCenter { get; }
     public ProxyViewModel Proxy { get; }
+    public DshViewModel Dsh { get; }
 
     public bool HasUpdateBanner => UpdateBannerText.Length > 0;
 
@@ -187,6 +192,7 @@ public sealed partial class MainViewModel : ObservableObject
         await NotificationCenter.LoadAsync(Settings.NotificationHistoryRetentionDays);
         await Proxy.InitializeAsync();
         Proxy.ApplyClientScopes(Settings.ClientSyncScopes);
+        await Dsh.LoadAsync(Settings.DshLocalPort);
         RefreshUsageLocalization();
         LastUpdated = _text.Format("Status_Updated", DateTime.Now);
     }
@@ -353,6 +359,7 @@ public sealed partial class MainViewModel : ObservableObject
             Vpn.RefreshLocalization();
             NotificationCenter.RefreshLocalization();
             Proxy.RefreshLocalization();
+            Dsh.RefreshLocalization();
             await RefreshQuotaStateAsync();
             try
             {
@@ -390,6 +397,7 @@ public sealed partial class MainViewModel : ObservableObject
         NotificationHistoryRetentionDays = settings.NotificationHistoryRetentionDays,
         CliProxyAutoStart = settings.CliProxyAutoStart,
         UpdateCheckEnabled = settings.UpdateCheckEnabled,
+        DshLocalPort = settings.DshLocalPort,
         ClientSyncScopes = settings.ClientSyncScopes.ToDictionary(
             pair => pair.Key,
             pair => new ProxyClientSyncScope

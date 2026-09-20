@@ -321,4 +321,6 @@ public sealed class AppSettings
     public bool UpdateCheckEnabled { get; set; } = true;
     /// <summary>键为 ProxyClientKind 名称；记录各客户端上次同步使用的上游范围，缺失时视为全部上游。</summary>
     public Dictionary<string, ProxyClientSyncScope> ClientSyncScopes { get; set; } = [];
+    /// <summary>本机 dsh web 的启动/探测端口。</summary>
+    public int DshLocalPort { get; set; } = 3080;
 }

@@ -6,10 +6,12 @@ using LiveChartsCore;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.Themes;
 using OhMyPc.App.Services;
+using OhMyPc.App.Dialogs;
 using OhMyPc.App.ViewModels;
 using OhMyPc.Core;
 using OhMyPc.Core.Domain;
 using OhMyPc.Infrastructure;
+using OhMyPc.Infrastructure.Dsh;
 using OhMyPc.Infrastructure.LocalApi;
 using OhMyPc.Infrastructure.Logging;
 using OhMyPc.Infrastructure.Persistence;
@@ -62,6 +64,25 @@ public partial class App : System.Windows.Application
             builder.Services.AddSingleton<LocalizationService>();
             builder.Services.AddSingleton<ITextLocalizer>(services => services.GetRequiredService<LocalizationService>());
             builder.Services.AddSingleton<ThemeService>();
+            builder.Services.AddSingleton(_ => new DshInteractionPrompts
+            {
+                // SSH 连接发生在后台线程，弹窗统一调度回 UI 线程
+                RequestKeyPassphrase = keyPath => RunOnUi(() =>
+                {
+                    var dialog = new DshPassphraseDialog(
+                        _.GetRequiredService<LocalizationService>(), keyPath) { Owner = _.GetRequiredService<MainWindow>() };
+                    return dialog.ShowDialog() == true ? dialog.Passphrase : null;
+                }),
+                RequestHostKeyTrust = info => RunOnUi(() =>
+                {
+                    var text = _.GetRequiredService<LocalizationService>();
+                    return System.Windows.MessageBox.Show(
+                        string.Format(text["Message_DshHostKeyTrust"], info.Host, info.Port, info.KeyType, info.Fingerprint),
+                        text["Dsh_HostKeyTitle"],
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Warning) == MessageBoxResult.Yes;
+                })
+            });
             builder.Services.AddOhMyPcInfrastructure();
             builder.Services.AddSingleton<StartupRegistrationService>();
             builder.Services.AddSingleton<DesktopNotificationSink>();
@@ -73,6 +94,7 @@ public partial class App : System.Windows.Application
             builder.Services.AddSingleton<MainViewModel>();
             builder.Services.AddSingleton<VpnQuotaViewModel>();
             builder.Services.AddSingleton<ProxyViewModel>();
+            builder.Services.AddSingleton<DshViewModel>();
             builder.Services.AddSingleton<MainWindow>();
 
             _host = builder.Build();
@@ -125,6 +147,13 @@ public partial class App : System.Windows.Application
                 MessageBoxImage.Error);
             Shutdown(1);
         }
+    }
+
+    /// <summary>SSH 连接流程在后台线程请求人工确认时，把弹窗调度回 UI 线程并等待结果。</summary>
+    private static Task<T> RunOnUi<T>(Func<T> func)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        return dispatcher is null ? Task.FromResult(func()) : dispatcher.InvokeAsync(func).Task;
     }
 
     protected override void OnExit(ExitEventArgs e)

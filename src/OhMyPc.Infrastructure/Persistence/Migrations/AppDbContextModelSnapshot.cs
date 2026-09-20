@@ -401,6 +401,62 @@ namespace OhMyPc.Infrastructure.Persistence.Migrations
                     b.ToTable("Settings", (string)null);
                 });
 
+            modelBuilder.Entity("OhMyPc.Infrastructure.Persistence.DshServerEntity", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("AuthKind")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<byte[]>("EncryptedPassword")
+                        .IsRequired()
+                        .HasColumnType("BLOB");
+
+                    b.Property<string>("Host")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ConfigSyncSelection")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("HostKeyFingerprint")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("KeyPath")
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("LocalPort")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("RemotePort")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SshPort")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DshServers", (string)null);
+                });
+
             modelBuilder.Entity("OhMyPc.Infrastructure.Persistence.CredentialEntity", b =>
                 {
                     b.HasOne("OhMyPc.Infrastructure.Persistence.DataSourceEntity", "Source")

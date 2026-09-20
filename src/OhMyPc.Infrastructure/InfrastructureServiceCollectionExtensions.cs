@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using OhMyPc.Core;
 using OhMyPc.Infrastructure.Automation;
 using OhMyPc.Infrastructure.CliProxy;
+using OhMyPc.Infrastructure.Dsh;
 using OhMyPc.Infrastructure.InputStatus;
 using OhMyPc.Infrastructure.LocalApi;
 using OhMyPc.Infrastructure.LocalUsage;
@@ -103,6 +104,19 @@ public static class InfrastructureServiceCollectionExtensions
         });
         services.AddSingleton<IRemoteModelListClient, RemoteModelListClient>();
         services.AddSingleton<IModelMetadataProvider, ModelMetadataClient>();
+
+        services.AddHttpClient("npm-registry", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(15);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("OhMyPc/1.0");
+        });
+        services.AddSingleton<SshSessionPool>();
+        services.AddSingleton<IDshTunnelService, DshTunnelService>();
+        services.AddSingleton<ILocalDshManager, LocalDshProcessService>();
+        services.AddSingleton<DshVersionClient>();
+        services.AddSingleton<DshRemoteServiceFactory>();
+        services.AddSingleton<DshConfigSyncService>();
+
         services.AddSingleton<IProxyConfigStore, CliProxyConfigStore>();
         services.AddSingleton<ICliProxyInstaller, CliProxyInstaller>();
         services.AddSingleton<CliProxyStatusService>();

@@ -593,6 +593,81 @@ public sealed class AppStore(
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<DshServerDefinition>> ListDshServersAsync(CancellationToken cancellationToken = default)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await db.DshServers.AsNoTracking()
+            .OrderBy(x => x.Name)
+            .Select(x => ToDshServer(x))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task SaveDshServerAsync(DshServerDefinition server, string? password, CancellationToken cancellationToken = default)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var entity = await db.DshServers.SingleOrDefaultAsync(x => x.Id == server.Id, cancellationToken);
+        if (entity is null)
+        {
+            entity = new DshServerEntity { Id = server.Id };
+            db.DshServers.Add(entity);
+        }
+
+        Apply(server, entity);
+        if (password is not null)
+        {
+            entity.EncryptedPassword = password.Length == 0 ? [] : credentialProtector.Protect(password);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task DeleteDshServerAsync(string id, CancellationToken cancellationToken = default)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        await db.DshServers.Where(x => x.Id == id).ExecuteDeleteAsync(cancellationToken);
+    }
+
+    public async Task<string?> GetDshPasswordAsync(string serverId, CancellationToken cancellationToken = default)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var value = await db.DshServers.AsNoTracking()
+            .Where(x => x.Id == serverId)
+            .Select(x => x.EncryptedPassword)
+            .SingleOrDefaultAsync(cancellationToken);
+        return value is not { Length: > 0 } ? null : credentialProtector.Unprotect(value);
+    }
+
+    private static DshServerDefinition ToDshServer(DshServerEntity entity) => new()
+    {
+        Id = entity.Id,
+        Name = entity.Name,
+        Host = entity.Host,
+        SshPort = entity.SshPort,
+        UserName = entity.UserName,
+        AuthKind = (DshAuthKind)entity.AuthKind,
+        KeyPath = entity.KeyPath,
+        RemotePort = entity.RemotePort,
+        LocalPort = entity.LocalPort,
+        HostKeyFingerprint = entity.HostKeyFingerprint,
+        Note = entity.Note,
+        ConfigSyncSelection = entity.ConfigSyncSelection
+    };
+
+    private static void Apply(DshServerDefinition server, DshServerEntity entity)
+    {
+        entity.Name = server.Name.Trim();
+        entity.Host = server.Host.Trim();
+        entity.SshPort = Math.Clamp(server.SshPort, 1, 65535);
+        entity.UserName = server.UserName.Trim();
+        entity.AuthKind = (int)server.AuthKind;
+        entity.KeyPath = string.IsNullOrWhiteSpace(server.KeyPath) ? null : server.KeyPath.Trim();
+        entity.RemotePort = Math.Clamp(server.RemotePort, 1, 65535);
+        entity.LocalPort = Math.Clamp(server.LocalPort, 1, 65535);
+        entity.HostKeyFingerprint = server.HostKeyFingerprint;
+        entity.Note = string.IsNullOrWhiteSpace(server.Note) ? null : server.Note.Trim();
+        entity.ConfigSyncSelection = string.IsNullOrWhiteSpace(server.ConfigSyncSelection) ? null : server.ConfigSyncSelection.Trim();
+    }
+
     private static NotificationRecord ToNotification(NotificationEntity entity) => new()
     {
         Id = entity.Id,

@@ -48,6 +48,12 @@ public interface IAppStore
     Task SaveRuleStateAsync(AutomationRuleState state, CancellationToken cancellationToken = default);
     Task<AutomationSourceState?> GetSourceStateAsync(string key, CancellationToken cancellationToken = default);
     Task SaveSourceStateAsync(AutomationSourceState state, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<DshServerDefinition>> ListDshServersAsync(CancellationToken cancellationToken = default);
+    /// <summary>password 为 null 时保留已存密码，非 null 时覆盖。</summary>
+    Task SaveDshServerAsync(DshServerDefinition server, string? password, CancellationToken cancellationToken = default);
+    Task DeleteDshServerAsync(string id, CancellationToken cancellationToken = default);
+    Task<string?> GetDshPasswordAsync(string serverId, CancellationToken cancellationToken = default);
 }
 
 public interface ILocalUsageCollector
@@ -177,4 +183,37 @@ public interface IRemoteModelListClient
 public interface IModelMetadataProvider
 {
     Task<IReadOnlyDictionary<string, ModelMetadata>> GetAsync(CancellationToken cancellationToken = default);
+}
+
+/// <summary>本机 dsh web 实例的生命周期管理。</summary>
+public interface ILocalDshManager
+{
+    DshInstanceSnapshot Snapshot { get; }
+    event EventHandler? StateChanged;
+    Task RefreshAsync(CancellationToken cancellationToken = default);
+    Task StartAsync(int port, CancellationToken cancellationToken = default);
+    Task StopAsync(CancellationToken cancellationToken = default);
+}
+
+/// <summary>单台远端服务器的 DSH 编排；实例由工厂按服务器定义创建，不持有跨调用状态。</summary>
+public interface IRemoteDshService
+{
+    Task<DshProbeResult> ProbeAsync(CancellationToken cancellationToken = default);
+    Task InstallAsync(IProgress<string> progress, CancellationToken cancellationToken = default);
+    Task UpdateAsync(IProgress<string> progress, CancellationToken cancellationToken = default);
+    /// <summary>后台拉起 dsh web，成功返回带 token 的面板地址（等待日志输出，超时返回 null）。</summary>
+    Task<string?> StartAsync(DshLaunchOptions options, CancellationToken cancellationToken = default);
+    Task StopAsync(CancellationToken cancellationToken = default);
+    /// <summary>从远端日志读取最近一次 dsh web 打印的面板地址；未运行或未记录时返回 null。</summary>
+    Task<string?> GetPanelUrlAsync(CancellationToken cancellationToken = default);
+}
+
+/// <summary>SSH 本地端口转发：把远端回环的 dsh web 暴露到本机回环端口。</summary>
+public interface IDshTunnelService
+{
+    event EventHandler? StateChanged;
+    IReadOnlyList<DshTunnelHandle> Active { get; }
+    Task<DshTunnelHandle> OpenAsync(DshServerDefinition server, CancellationToken cancellationToken = default);
+    void Close(string serverId);
+    bool IsOpen(string serverId);
 }

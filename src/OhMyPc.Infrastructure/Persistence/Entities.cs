@@ -136,3 +136,20 @@ public sealed class SettingEntity
     public string JsonValue { get; set; } = "";
     public string UpdatedAt { get; set; } = "";
 }
+
+public sealed class DshServerEntity
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Host { get; set; } = "";
+    public int SshPort { get; set; }
+    public string UserName { get; set; } = "";
+    public int AuthKind { get; set; }
+    public string? KeyPath { get; set; }
+    public int RemotePort { get; set; }
+    public int LocalPort { get; set; }
+    public string? HostKeyFingerprint { get; set; }
+    public string? Note { get; set; }
+    public string? ConfigSyncSelection { get; set; }
+    public byte[] EncryptedPassword { get; set; } = [];
+}

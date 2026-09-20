@@ -15,6 +15,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<VpnDailyUsageEntity> VpnDailyUsage => Set<VpnDailyUsageEntity>();
     public DbSet<NotificationEntity> Notifications => Set<NotificationEntity>();
     public DbSet<SettingEntity> Settings => Set<SettingEntity>();
+    public DbSet<DshServerEntity> DshServers => Set<DshServerEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -107,6 +108,18 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.ToTable("Settings");
             entity.HasKey(x => x.Key);
+        });
+
+        modelBuilder.Entity<DshServerEntity>(entity =>
+        {
+            entity.ToTable("DshServers");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(120);
+            entity.Property(x => x.Host).HasMaxLength(256);
+            entity.Property(x => x.UserName).HasMaxLength(64);
+            entity.Property(x => x.KeyPath).HasMaxLength(512);
+            entity.Property(x => x.HostKeyFingerprint).HasMaxLength(128);
+            entity.Property(x => x.Note).HasMaxLength(512);
         });
     }
 }

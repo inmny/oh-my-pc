@@ -11,6 +11,8 @@
             <ResourceDictionary Source="Themes/Tooltips.xaml" />
         </ResourceDictionary.MergedDictionaries>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <converters:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter" />
+        <converters:NotNullToVisibilityConverter x:Key="NotNullToVisibilityConverter" />
         <converters:LocalizedEnumConverter x:Key="LocalizedEnumConverter" />
         <converters:LocalizedRuleNameConverter x:Key="LocalizedRuleNameConverter" />
         <converters:LocalizedAutomationEventConverter x:Key="LocalizedAutomationEventConverter" />

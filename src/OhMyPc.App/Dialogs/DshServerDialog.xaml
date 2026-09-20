@@ -1,0 +1,134 @@
+<Window x:Class="OhMyPc.App.Dialogs.DshServerDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{DynamicResource Dsh_ServerDialogTitle}"
+        Width="480"
+        Height="640"
+        ResizeMode="NoResize"
+        Background="{StaticResource BackgroundBrush}"
+        WindowStartupLocation="CenterOwner"
+        ShowInTaskbar="False">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel>
+            <TextBlock Text="{DynamicResource Dsh_ServerDialogTitle}" FontSize="18" FontWeight="SemiBold" />
+            <TextBlock Text="{DynamicResource Dsh_ServerDialogDescription}" Style="{StaticResource MutedText}" Margin="0,5,0,0" />
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,18,0,0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" /><RowDefinition Height="12" />
+                    <RowDefinition Height="Auto" /><RowDefinition Height="12" />
+                    <RowDefinition Height="Auto" /><RowDefinition Height="12" />
+                    <RowDefinition Height="Auto" /><RowDefinition Height="12" />
+                    <RowDefinition Height="Auto" /><RowDefinition Height="12" />
+                    <RowDefinition Height="Auto" /><RowDefinition Height="12" />
+                    <RowDefinition Height="Auto" /><RowDefinition Height="12" />
+                    <RowDefinition Height="Auto" /><RowDefinition Height="12" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel>
+                    <Label Content="{DynamicResource Common_Name}" />
+                    <TextBox x:Name="NameBox" />
+                </StackPanel>
+
+                <Grid Grid.Row="2">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="110" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <Label Content="{DynamicResource Dsh_FieldHost}" />
+                        <TextBox x:Name="HostBox" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <Label Content="{DynamicResource Dsh_FieldSshPort}" />
+                        <TextBox x:Name="SshPortBox" Text="22" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Grid.Row="4">
+                    <Label Content="{DynamicResource Dsh_FieldUser}" />
+                    <TextBox x:Name="UserBox" Text="root" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="6">
+                    <Label Content="{DynamicResource Dsh_FieldAuth}" />
+                    <ComboBox x:Name="AuthBox" SelectionChanged="AuthBox_SelectionChanged">
+                        <ComboBoxItem Content="{DynamicResource Dsh_AuthKey}" Tag="Key" IsSelected="True" />
+                        <ComboBoxItem Content="{DynamicResource Dsh_AuthPassword}" Tag="Password" />
+                    </ComboBox>
+                </StackPanel>
+
+                <StackPanel Grid.Row="8">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedItem.Tag, ElementName=AuthBox}" Value="Key">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <Label Content="{DynamicResource Dsh_FieldKeyPath}" />
+                    <TextBox x:Name="KeyPathBox" />
+                    <TextBlock Text="{DynamicResource Dsh_FieldKeyPathHint}" Style="{StaticResource MutedText}" FontSize="11" Margin="0,4,0,0" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="8">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedItem.Tag, ElementName=AuthBox}" Value="Password">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <Label Content="{DynamicResource Dsh_FieldPassword}" />
+                    <PasswordBox x:Name="PasswordBox" />
+                </StackPanel>
+
+                <Grid Grid.Row="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" /><ColumnDefinition Width="12" /><ColumnDefinition Width="110" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel>
+                        <Label Content="{DynamicResource Dsh_FieldRemotePort}" />
+                        <TextBox x:Name="RemotePortBox" Text="3080" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <Label Content="{DynamicResource Dsh_FieldLocalPort}" />
+                        <TextBox x:Name="LocalPortBox" Text="13080" />
+                    </StackPanel>
+                </Grid>
+
+                <StackPanel Grid.Row="12">
+                    <Label Content="{DynamicResource Dsh_FieldNote}" />
+                    <TextBox x:Name="NoteBox" />
+                </StackPanel>
+
+                <StackPanel Grid.Row="14" Orientation="Horizontal">
+                    <Button x:Name="TestButton"
+                            Content="{DynamicResource Dsh_TestConnection}"
+                            Click="Test_Click"
+                            Margin="0,0,12,0" />
+                    <TextBlock x:Name="TestResultText" VerticalAlignment="Center" TextWrapping="Wrap" MaxWidth="280" />
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button Content="{DynamicResource Common_Cancel}" IsCancel="True" Margin="0,0,8,0" />
+            <Button x:Name="SaveButton" Style="{StaticResource PrimaryButton}" Click="Save_Click" />
+        </StackPanel>
+    </Grid>
+</Window>
